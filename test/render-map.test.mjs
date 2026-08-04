@@ -40,7 +40,7 @@ const tree = (build) => {
 }
 
 test("REGRESSION: a record name is redacted here too, not only in the aria map", () => {
-  // Measured 2026-08-04: docs/atlas/ajanlatok-new.md shipped ~340 lines of real
+  // Measured 2026-08-04: a picker page shipped ~340 lines of real
   // customer names and email addresses. The fix went into the aria compressor —
   // and the research renderer, which reads names from the DOM instead, promptly
   // leaked the same 300+ lines again because it did its own labelling. One
@@ -95,7 +95,7 @@ test("side-by-side panes come out as sibling regions — the fact ARIA cannot ex
 })
 
 test("scroll depth is stated — the fact a screenshot cannot show either", () => {
-  // /ajanlatok/new holds 18,866px of list in a 318px frame. The picture guessed
+  // a measured screen held 18,866px of list in a 318px frame. The picture guessed
   // "3–15×" against a real 59×; no still image can show what is below the fold.
   const nodes = tree(() => [
     node({ w: 1000, h: 800, dsp: "flex" }),
@@ -109,11 +109,11 @@ test("scroll depth is stated — the fact a screenshot cannot show either", () =
 })
 
 test("REGRESSION: controls left outside the unwrapped frame are announced, not dropped", () => {
-  // The walk skips wrapper elements to get to the region that matters. On every
-  // consumer-a screen two controls live OUTSIDE the app container — a floating
-  // assistant button and the toast region — and unwrapping silently swallowed
-  // them. A control that is on the screen and missing from the map is the exact
-  // failure this tool exists to catch.
+  // The walk skips wrappers to reach the region that matters. In one measured
+  // app every screen had two controls OUTSIDE the page container — a floating
+  // assistant button and a toast region — and unwrapping swallowed them
+  // silently. A control that is on the screen and missing from the map is the
+  // exact failure this tool exists to catch.
   const nodes = tree(() => {
     const out = [
       node({ w: 1000, h: 800 }),
@@ -155,7 +155,7 @@ test("REGRESSION: a scrolling table still collapses its rows", () => {
   // The scroll fact belongs to the box that scrolls, so an early fix refused to
   // unwrap past a scroller. That left a scrolling table with no child regions at
   // all, its rows never reached the repeat collapse, and every one printed:
-  // docs/atlas/szamlak.md went 469 → 3,092 tokens on the first real run. Both
+  // one generated page went 469 → 3,092 tokens on the first real run. Both
   // facts have to survive together — the scroll depth AND the collapse.
   const nodes = tree(() => {
     const out = [
@@ -181,7 +181,7 @@ test("REGRESSION: a scrolling table still collapses its rows", () => {
 test("REGRESSION: a region is named by its own heading", () => {
   // The first region map dropped EVERY heading. The flat map it replaced had
   // carried them, so the new format lost exactly the words that answer "where
-  // does this go?" — "Bejövő rendelések", "Visszaigazolt teljesítés". Censused
+  // does this go?" — the section titles themselves. Censused
   // across 33 real screens: 74 of 590 regions (12%) had a title going in the bin.
   const nodes = tree(() => [
     node({ w: 1000, h: 800, dsp: "flex" }),

@@ -42,7 +42,7 @@ const isRegionSized = (k) => visible(k) && area(k) >= MIN_REGION_AREA && k.w >= 
  * painted ON TOP of a sibling rather than beside it.
  *
  * ⚠ Treating overlap as "this parent does not split" silently destroyed
- * /ajanlatok/new: its partner dropdown covers the card below it, so the entire
+ * one page whose partner dropdown covers the card below it, so the entire
  * page — 334 controls — stayed one undifferentiated region. An overlay is a
  * layout fact of its own and must be NAMED, not used as a reason to give up.
  */
@@ -68,7 +68,7 @@ function partitionOverlays(kids) {
  * Walks down from `start`, skipping wrappers, and returns the region tree.
  * @returns {{node, children: []}}
  */
-// ⚠ 5 was too shallow: on /ajanlatok/new the partner dropdown sits at level 6,
+// ⚠ 5 was too shallow: a measured dropdown sat at level 6,
 // so the region walk stopped above it and its 331 rows spilled into an ancestor
 // as loose controls — 6,345 tokens of list pretending to be interface.
 export function regionTree(nodes, start = 0, depth = 0, maxDepth = 8) {
@@ -79,7 +79,7 @@ export function regionTree(nodes, start = 0, depth = 0, maxDepth = 8) {
   //
   // ⚠ An earlier version stopped unwrapping when the child did not FILL the
   // parent, on the theory that a partly-filled parent is a region in its own
-  // right. On /ajanlatok/new that stopped the walk dead: the page is a 672px
+  // right. On that page it stopped the walk dead: the page is a 672px
   // column centred in 1536px, so the whole form — 334 controls, including a
   // dropdown holding 18,866px of scrollable content — stayed one opaque region.
   // A lone region-sized child means the parent is margin. What the parent DOES
@@ -102,7 +102,7 @@ export function regionTree(nodes, start = 0, depth = 0, maxDepth = 8) {
     // the aria dump nor a screenshot can express. But REFUSING to unwrap there
     // was worse: a scrolling table then had no children at all, so its 104 rows
     // never reached the repeat collapse and all 104 printed individually —
-    // docs/atlas/szamlak.md went 469 → 3,092 tokens. Carry the fact forward and
+    // one generated page went 469 → 3,092 tokens. Carry the fact forward and
     // keep walking.
     if (!scroll && isScroller(nodes[current])) scroll = nodes[current]
     const kids = childrenOf(nodes, current).filter((k) => visible(k) && area(k) >= MIN_REGION_AREA)
@@ -145,10 +145,10 @@ export function regionTree(nodes, start = 0, depth = 0, maxDepth = 8) {
 /**
  * A 209-row order list is ONE region — a list — not 209 regions.
  *
- * Without this the region tree of /rendelesek was 209 sibling boxes deep and the
+ * Without this one region tree was 209 sibling boxes deep and the
  * three columns it exists to show were buried under them.
  *
- * ⚠ Width + tag alone is NOT enough. On /rendelesek the four stacked bars
+ * ⚠ Width + tag alone is NOT enough. In one app the four stacked bars
  * (category tabs, filters, toolbar, content) are all `div` and all 1536 wide, so
  * a width-only rule folded the entire page into one phantom "×4 list" and the
  * three columns disappeared again — the same failure, one level up. What
@@ -187,11 +187,11 @@ function collapseRepeats(nodes, siblings) {
     byKey.get(key).push(node)
   }
 
-  // ⚠ Shape alone over-merges. On /penzugy three siblings share the key
+  // ⚠ Shape alone over-merges. In one app three siblings shared the key
   // `div|div` but measure 81px, 81px and 782px tall: two summary strips and the
   // entire content area below them. Folding those into one "×3 list" hid 267
   // controls. Members of a list must also be of one SIZE — 2× is the widest
-  // ratio a wrapping row produces (measured: 88…125px on /rendelesek).
+  // ratio a wrapping row produces (measured: 88…125px).
   const MAX_HEIGHT_RATIO = 2
   const buckets = []
   for (const group of byKey.values()) {
@@ -225,7 +225,7 @@ function collapseRepeats(nodes, siblings) {
  *
  * The extractor walks preorder, so a parent's index is always lower than its
  * children's — accumulating from the end lets one backwards loop replace a
- * subtree walk per node (6,286 nodes on /rendelesek).
+ * subtree walk per node (6,286 nodes on the densest measured screen).
  */
 const countCache = new WeakMap()
 function controlCounts(nodes) {

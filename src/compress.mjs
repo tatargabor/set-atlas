@@ -24,9 +24,9 @@ const DATA_LIKE = /\d{2}[-.:]\d{2}|\d[\d.,\s]{3,}\s*(Ft|EUR|USD|GBP|€|\$|£)|\
 /**
  * An email address in an accessible name is a person, never a control.
  *
- * ⚠ Measured 2026-08-04: the consumer-a picker page shipped 340 lines of real
- * customer names and addresses into `docs/atlas/ajanlatok-new.md` — 5,640
- * tokens, a fifth of the whole atlas — because DATA_LIKE only knew dates,
+ * ⚠ Measured 2026-08-04: a consumer's partner-picker page shipped 340 lines of real
+ * customer names and addresses into its generated atlas — 5,640 tokens, a
+ * fifth of the whole thing — because DATA_LIKE only knew dates,
  * amounts and record ids. It is checked BEFORE the length gate: ". foo@bar.hu"
  * is nineteen characters and still a customer.
  */

@@ -18,7 +18,7 @@ const screen = (url, pattern, extra = {}) => ({
 })
 
 test("REGRESSION: two routes sharing a pattern fail loudly instead of overwriting", () => {
-  // Reported by the consumer-a agent 2026-08-04, after the atlas turned out to be
+  // Reported by the a measured app agent 2026-08-04, after the atlas turned out to be
   // seeing the `?fazis=quotes` tab only because a legacy `/ajanlatok` URL happens
   // to redirect there. Adding the tab the obvious way —
   //   { url: "/rendelesek?fazis=quotes", pattern: "/rendelesek" }

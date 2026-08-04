@@ -10,7 +10,7 @@
 //   scored WORSE (42/46) and cost 51% more. What a reader uses is containment
 //   and size; the absolute position of a button adds nothing it can act on.
 //
-//   Scroll depth is the fact nothing else carries. /ajanlatok/new holds 18,866px
+//   Scroll depth is the fact nothing else carries. a measured screen held 18,866px
 //   of list in a 318px frame. The aria dump cannot say it, and the screenshot
 //   cannot show it — the picture guessed "3–15×" against a real 59×.
 
@@ -47,7 +47,7 @@ function labelFor(node, place = "") {
 /**
  * Where each control sits ACROSS its region — the one thing every format missed.
  *
- * ⚠ Measured: on /rendelesek all six formats, the screenshot included, answered
+ * ⚠ Measured: on one screen all six formats, the screenshot included, answered
  * "top-left" for a search box that sits at x=1392 in a full-width filter bar.
  * Reading order says nothing about which end of a bar something is on, and
  * "actions are on the right" is how the placement decision actually gets made.
@@ -89,7 +89,7 @@ function flowFor(node, childCount) {
 /**
  * What a region IS, argued only from what it directly owns.
  *
- * ⚠ Judging by the whole subtree labelled the root of /rendelesek "tab bar" —
+ * ⚠ Judging by the whole subtree labelled a page root "tab bar" —
  * true of something four levels down, useless as a description of the page.
  */
 function roleFor(nodes, tree, owned) {
@@ -131,7 +131,7 @@ function repeatedBelow(tree) {
  * The region's own title, if it has one.
  *
  * ⚠ The first region map shipped without this and dropped EVERY heading —
- * "Bejövő rendelések", "Visszaigazolt teljesítés", "Kapcsolódó kiegészítők".
+ * its section titles.
  * The flat map it replaced had carried them, so the new format was a regression
  * on exactly the words a designer needs to say where something goes. Censused:
  * 74 of 590 regions (12%) carry a heading that was going in the bin.
