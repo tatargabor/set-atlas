@@ -1,0 +1,43 @@
+{
+  "name": "set-atlas",
+  "version": "0.1.0",
+  "description": "Generated, compact map of your running app's UI — screens, menus, actions and where to look for more. Built for AI agents that need to know the surface before they design on it.",
+  "keywords": [
+    "claude-code",
+    "ai-agents",
+    "spec-driven-development",
+    "ui-documentation",
+    "playwright",
+    "accessibility-tree",
+    "aria-snapshot"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs",
+    "./compress": "./src/compress.mjs"
+  },
+  "bin": {
+    "set-atlas": "./src/cli.mjs"
+  },
+  "files": [
+    "src",
+    "atlas.config.example.mjs",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "peerDependencies": {
+    "playwright": ">=1.49"
+  },
+  "peerDependenciesMeta": {
+    "playwright": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,107 @@
+// The compressor — raw Playwright aria-snapshot YAML → compact surface map.
+//
+// The question it answers: what part of a screen matters when you're about to
+// design on it? Not the data (row 200 of an order list tells you nothing about
+// the screen), but the structure: menus, buttons, tabs, filters, fields, table
+// columns — and where the links lead.
+//
+// Measured (a 35-screen Next.js ERP, 2026-08-04): 147k tokens → 24.6k tokens.
+
+/** ARIA roles that describe the SURFACE. Everything else is content. */
+const STRUCTURAL_ROLES =
+  /^(button|link|tab|tablist|textbox|searchbox|combobox|checkbox|radio|switch|slider|spinbutton|menuitem|option|heading|dialog|alert|status|navigation|main|banner|contentinfo|region|form|table|columnheader|listbox|menu|menubar|progressbar)\b/
+
+/**
+ * Detects data-shaped accessible names.
+ *
+ * A list card's name describes the RECORD ("Jane Doe … INV-00303 … €312.45"),
+ * not the interface. Keeping it causes two problems: real (often personal) data
+ * leaks into the map, and every new record rewrites the file — the diff turns to
+ * noise and the "did the UI change?" gate becomes useless.
+ */
+const DATA_LIKE = /\d{2}[-.:]\d{2}|\d[\d.,\s]{3,}\s*(Ft|EUR|USD|GBP|€|\$|£)|\b[A-Z]{1,3}-\d{3,}\b/
+
+const MIN_DATA_NAME_LENGTH = 25
+
+function anonymizeName(text) {
+  return text.replace(
+    new RegExp(`"([^"]{${MIN_DATA_NAME_LENGTH},})"`, "g"),
+    (whole, name) => (DATA_LIKE.test(name) ? '"‹record›"' : whole)
+  )
+}
+
+function parseLines(yamlText) {
+  return yamlText.split("\n").map((line) => {
+    const indent = line.match(/^\s*/)[0].length
+    const content = line.trim().replace(/^-\s*/, "")
+    return { indent, content, role: content.match(/^([a-z]+)/)?.[1] ?? "" }
+  })
+}
+
+/**
+ * @param {string} yamlText  raw output of `page.ariaSnapshot()`
+ * @returns {{ text: string, droppedDataLines: number }}
+ */
+export function compress(yamlText) {
+  const lines = parseLines(yamlText)
+  const kept = []
+  let i = 0
+  let droppedDataLines = 0
+
+  while (i < lines.length) {
+    const line = lines[i]
+
+    // Table data: the whole row/rowgroup block goes, but the column headers
+    // (the column structure — part of the interface) are lifted out.
+    if (line.role === "rowgroup" || line.role === "row") {
+      const headers = []
+      const start = i
+      i++
+      while (i < lines.length && lines[i].indent > line.indent) {
+        if (lines[i].role === "columnheader") {
+          headers.push(lines[i].content.replace(/^columnheader\s*/, "").replace(/^"|"$/g, ""))
+        }
+        i++
+      }
+      droppedDataLines += i - start
+      if (headers.length) kept.push({ indent: line.indent, content: `columns: ${headers.join(" · ")}` })
+      continue
+    }
+
+    // Free text and images describe the content, not the surface.
+    if (line.role === "text" || line.role === "paragraph" || line.role === "img") {
+      i++
+      continue
+    }
+
+    if (!line.content || !STRUCTURAL_ROLES.test(line.content)) {
+      i++
+      continue
+    }
+
+    kept.push({ indent: line.indent, content: line.content })
+    i++
+  }
+
+  // Collapse repeated siblings.
+  //
+  // ⚠ The collapse key is the FULL (anonymized) text — including the name.
+  // An earlier version normalized names away too, so eleven distinct menu items
+  // collapsed into a single `link "…"` row: the navigation disappeared, which is
+  // the very thing the map exists for. Guarded by test/compress.test.mjs.
+  const merged = []
+  for (let j = 0; j < kept.length; j++) {
+    const key = anonymizeName(kept[j].content)
+    let count = 1
+    while (j + count < kept.length && kept[j + count].indent === kept[j].indent && anonymizeName(kept[j + count].content) === key) {
+      count++
+    }
+    merged.push(" ".repeat(kept[j].indent) + "- " + key + (count > 1 ? `   (× ${count})` : ""))
+    j += count - 1
+  }
+
+  return { text: merged.join("\n"), droppedDataLines }
+}
+
+/** Rough token estimate — ~3.3 characters per token for mixed-language text. */
+export const estimateTokens = (text) => Math.round(text.length / 3.3)
