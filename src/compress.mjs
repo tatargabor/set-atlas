@@ -57,8 +57,43 @@ export function isRecordName(name, dataPatterns = []) {
 
 export const RECORD_PLACEHOLDER = "‹record›"
 
+/**
+ * The name as it should appear on the map: the record gone, the interface kept.
+ *
+ * ⚠ Measured 2026-08-04, an hour after `dataPatterns` shipped: it removed every company
+ * name — and the ACTION with it. `button "ACME Ltd. expand"` became `button "‹record›"`,
+ * so "expand" went to zero hits across the whole atlas and the cross-section could no
+ * longer answer whether such an action exists. Same rule the table row count taught:
+ * do not throw away what you know.
+ *
+ * The two cases differ in SCOPE, which is why they are handled differently. An email
+ * makes the whole label a record — the name printed beside it is part of that record.
+ * A consumer pattern matches inside a sentence, and the rest of the sentence is
+ * interface. So the built-ins replace the label; consumer patterns replace their match.
+ *
+ * ⚠ Which means the pattern must cover the WHOLE record name, not just the word that
+ * marks it: `/\b(Ltd)\b/` on "ACME Ltd." leaves "ACME" behind. See the example config.
+ */
+export function redactName(name, dataPatterns = []) {
+  if (!name) return name
+  if (EMAIL_LIKE.test(name)) return RECORD_PLACEHOLDER
+
+  let out = name
+  for (const p of dataPatterns) {
+    const global = p.flags.includes("g") ? p : new RegExp(p.source, p.flags + "g")
+    out = out.replace(global, RECORD_PLACEHOLDER)
+  }
+  if (out !== name) {
+    // Collapse a label that turned out to be nothing but record — placeholder plus
+    // stray punctuation is still just a record.
+    const bare = out.replaceAll(RECORD_PLACEHOLDER, "").replace(/[\s.,:;·—-]/g, "")
+    return bare ? out.replace(/\s+/g, " ").trim() : RECORD_PLACEHOLDER
+  }
+  return name.length >= MIN_DATA_NAME_LENGTH && DATA_LIKE.test(name) ? RECORD_PLACEHOLDER : name
+}
+
 function anonymizeName(text, dataPatterns = []) {
-  return text.replace(/"([^"]*)"/g, (whole, name) => (isRecordName(name, dataPatterns) ? `"${RECORD_PLACEHOLDER}"` : whole))
+  return text.replace(/"([^"]*)"/g, (whole, name) => `"${redactName(name, dataPatterns)}"`)
 }
 
 function parseLines(yamlText) {

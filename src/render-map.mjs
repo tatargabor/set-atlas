@@ -15,7 +15,7 @@
 //   cannot show it — the picture guessed "3–15×" against a real 59×.
 
 import { regionTree, subtree, controlsIn, isScroller } from "./regions.mjs"
-import { isRecordName, RECORD_PLACEHOLDER } from "./compress.mjs"
+import { isRecordName, redactName, RECORD_PLACEHOLDER } from "./compress.mjs"
 
 const CONTROL_TAGS = new Set(["button", "a", "input", "textarea", "select"])
 const CONTROL_ROLES = new Set(["button", "link", "tab", "checkbox", "radio", "switch", "menuitem", "option", "combobox", "textbox"])
@@ -40,7 +40,7 @@ function labelFor(node, place = "", dataPatterns = []) {
   const flags = [place, node.dis ? "disabled" : "", node.sel ? "selected" : ""].filter(Boolean)
   const suffix = flags.length ? ` [${flags.join("] [")}]` : ""
   if (!name) return (node.testid ? `${kind} #${node.testid}` : kind) + suffix
-  const shown = isRecordName(name, dataPatterns) ? RECORD_PLACEHOLDER : name.slice(0, 60)
+  const shown = redactName(name, dataPatterns).slice(0, 60)
   return `${kind} "${shown}"${suffix}`
 }
 
@@ -154,7 +154,7 @@ function titleFor(owned, dataPatterns = []) {
   const heading = owned.filter((n) => /^h[1-6]$/.test(n.tag) && n.name).sort((a, b) => a.y - b.y || a.tag.localeCompare(b.tag))[0]
   if (!heading) return ""
   const text = heading.name.replace(/\s+/g, " ").trim()
-  return isRecordName(text, dataPatterns) ? RECORD_PLACEHOLDER : text.slice(0, 60)
+  return redactName(text, dataPatterns).slice(0, 60)
 }
 
 /** Controls this region owns — not the ones its child regions own. */
@@ -248,8 +248,11 @@ export function renderMap(nodes, { visual = true, dataPatterns = [] } = {}) {
       for (const c of own) {
         const name = (c.name || "").replace(/\s+/g, " ").trim()
         // A name with no letter in it is a row number or a bullet, never an action.
-        if (name && /\p{L}/u.test(name) && !isRecordName(name, dataPatterns))
-          controlList.push({ kind: kindOf(c), name: name.slice(0, 60), href: c.href || "" })
+        const shown = redactName(name, dataPatterns)
+        // A label that is nothing but a record names no action — but one with an action
+        // left around it does, and that is what the cross-section is for.
+        if (name && /\p{L}/u.test(name) && shown !== RECORD_PLACEHOLDER)
+          controlList.push({ kind: kindOf(c), name: shown.slice(0, 60), href: c.href || "" })
       }
     const place = visual ? placements(node, own) : new Map()
     for (const line of collapse(own.map((c) => `${pad}  - ${labelFor(c, place.get(c.i) ?? "", dataPatterns)}`))) lines.push(line)

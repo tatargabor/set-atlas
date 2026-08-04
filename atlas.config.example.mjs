@@ -31,7 +31,16 @@ export default {
   // person, or a project) is specific to your data and your language, so only you
   // can declare it.
   //
-  //   dataPatterns: [/\b(Ltd|Inc|GmbH|Kft|Zrt)\b\.?/i],
+  //   dataPatterns: [/\p{Lu}[\p{L}\d\s.&-]*?\b(Ltd|Inc|GmbH|Kft|Zrt)\b\.?/u],
+  //
+  // ⚠ Match the WHOLE record name, not just the word that marks it. `/\b(Ltd)\b/`
+  // turns "ACME Ltd. expand" into "ACME ‹record› expand" — the company name stays.
+  // The form above takes the capitalised run in front of the marker with it.
+  //
+  // Only the match is replaced, so the action around it survives:
+  // `"ACME Ltd. expand"` → `"‹record› expand"`. Measured — replacing the whole
+  // label instead cost every such action its name, and ACTIONS.md could no longer
+  // answer whether an "expand" action exists at all.
   //
   // ⚠ Check the output after adding one: too broad a pattern silently erases the
   // action names you need to design with.

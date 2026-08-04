@@ -2,7 +2,7 @@
 // Run:  node --test
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { compress, isRecordName } from "../src/compress.mjs"
+import { compress, isRecordName, redactName } from "../src/compress.mjs"
 
 test("REGRESSION: distinct menu items must NOT collapse into one", () => {
   // Measured on a real ERP surface, 2026-08-04: the first version normalized
@@ -146,4 +146,24 @@ test("REGRESSION: a consumer's own data patterns redact what the built-in rules 
   assert.equal(isRecordName("Előnézet frissítése", patterns), false)
   // Without the patterns the leak reproduces — this is what shipped.
   assert.equal(isRecordName("FIKTÍVFA Kft. lenyitása"), false)
+})
+
+test("REGRESSION: redaction removes the record, not the action wrapped around it", () => {
+  // Measured 2026-08-04, one hour after `dataPatterns` shipped: it worked — zero company
+  // names left — but `button "FIKTÍVFA Kft. lenyitása"` became `button "‹record›"`, and
+  // with it the ACTION disappeared. "Partner megnyitása" went to zero hits across the whole
+  // atlas, so the cross-section could no longer answer whether such an action exists —
+  // which is the entire point of the cross-section.
+  //
+  // The rule is the same one the table row count taught: do not throw away what you know.
+  // An email is a record whole (the name beside it is part of the record); a consumer
+  // pattern matches INSIDE a sentence, and the rest of that sentence is interface.
+  const patterns = [/\p{Lu}[\p{L}\d\s.&-]*?\b(Kft|Zrt)\b\.?/u]
+  assert.equal(redactName("FIKTÍVFA Kft. lenyitása", patterns), "‹record› lenyitása")
+  assert.equal(redactName("Lorem Ipsum Kft partner megnyitása", patterns), "‹record› partner megnyitása")
+  // A label that is ONLY a record stays fully redacted — nothing of interface to keep.
+  assert.equal(redactName("Dolor Sit Amet Kft.", patterns), "‹record›")
+  // The built-ins are unchanged: an email makes the whole label a record.
+  assert.equal(redactName("Jane Doe jane.doe@example.com", patterns), "‹record›")
+  assert.equal(redactName("Szűrők törlése", patterns), "Szűrők törlése")
 })

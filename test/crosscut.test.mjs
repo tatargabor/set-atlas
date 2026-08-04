@@ -65,3 +65,28 @@ test("a link to a record URL counts as a link to its route pattern", () => {
   assert.equal(patternFor("https://example.com/kulso"), null, "an external link is not navigation within the app")
   assert.equal(patternFor("/partnerek"), "/partnerek")
 })
+
+test("REGRESSION: one component behind two routes is not a duplicate", () => {
+  // Measured on the first real ACTIONS.md: of 49 multi-screen rows, 33 came from
+  // list+detail route pairs (`/orders` and `/orders/[id]`) that render THE SAME client
+  // component — the id only preselects a row. Listed as "offered on two screens" they
+  // read exactly like the duplication being hunted for, and they buried the handful of
+  // rows that were real. Two thirds of the signal was structural noise.
+  //
+  // No heuristic needed: the frontmatter already records each screen's source file.
+  const screens = [
+    screen("/orders", ["Approve", "Only mine"], { pointers: { source: "src/app/orders/page.tsx" } }),
+    screen("/orders/[id]", ["Approve"], { pointers: { source: "src/app/orders/page.tsx" } }),
+    screen("/invoices", ["Approve"], { pointers: { source: "src/app/invoices/page.tsx" } }),
+    screen("/settings", ["Only mine"], { pointers: { source: "src/app/settings/page.tsx" } }),
+  ]
+  const md = buildActions(screens)
+  const [main, sameSource] = md.split("## One component, several routes")
+
+  // `Approve` spans two DIFFERENT components — that is a real question, it stays.
+  assert.match(main, /\| `Approve` \|/)
+  // `Only mine` is on two screens too, but they are separate components, so it also
+  // stays. What moves out is only what is entirely one component's own.
+  assert.match(main, /\| `Only mine` \|/)
+  assert.ok(sameSource, "the section must exist so the rows are shown, not dropped")
+})

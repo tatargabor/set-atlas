@@ -54,8 +54,10 @@ function actionIndex(screens) {
     for (const c of s.controlList ?? []) {
       if (!ACTION_KINDS.has(c.kind) || seen.has(c.name)) continue
       seen.add(c.name)
-      if (!byName.has(c.name)) byName.set(c.name, { name: c.name, kind: c.kind, screens: [] })
-      byName.get(c.name).screens.push(label(s))
+      if (!byName.has(c.name)) byName.set(c.name, { name: c.name, kind: c.kind, screens: [], sources: new Set() })
+      const a = byName.get(c.name)
+      a.screens.push(label(s))
+      a.sources.add(s.pointers?.source ?? label(s))
     }
   }
   return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name))
@@ -68,8 +70,13 @@ export function buildActions(screens) {
   // Below a handful of screens "on most screens" means nothing — with two screens
   // an action shared by both is the duplication we are looking for, not chrome.
   const limit = live.length >= 5 ? Math.ceil(live.length * CHROME_SHARE) : Infinity
-  const own = all.filter(a => a.screens.length < limit)
   const chrome = all.filter(a => a.screens.length >= limit)
+  // A list route and its detail route usually render ONE component — the id only
+  // preselects a row — so "offered on two screens" says nothing about duplication.
+  // Measured: 33 of 49 multi-screen rows were this, burying the few that were real.
+  // The frontmatter already knows, so no heuristic is needed.
+  const oneComponent = all.filter(a => a.screens.length > 1 && a.screens.length < limit && a.sources.size === 1)
+  const own = all.filter(a => a.screens.length < limit && !oneComponent.includes(a))
 
   const row = a => `| \`${a.name}\` | ${a.screens.join(" · ")} |`
   return [
@@ -91,6 +98,16 @@ export function buildActions(screens) {
     "| action | screens |",
     "|---|---|",
     ...own.map(row),
+    "",
+    "## One component, several routes",
+    "",
+    "Every screen on these rows is rendered by the SAME source file, so the action is",
+    "offered once and reached by more than one URL — a list and its detail view, say.",
+    "Kept separate from the list above because there it would read as duplication.",
+    "",
+    "| action | screens | source |",
+    "|---|---|---|",
+    ...oneComponent.map(a => `| \`${a.name}\` | ${a.screens.join(" · ")} | \`${[...a.sources][0]}\` |`),
     "",
     `## Everywhere — on ${limit} of ${live.length} screens or more`,
     "",
