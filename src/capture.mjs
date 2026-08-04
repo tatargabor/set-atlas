@@ -6,10 +6,36 @@
 
 import fs from "node:fs"
 import path from "node:path"
+import { execFileSync } from "node:child_process"
 import { compress, estimateTokens } from "./compress.mjs"
 import { renderMap, extractNodes } from "./render-map.mjs"
 import { buildPointers } from "./pointers.mjs"
 import { buildActions, buildNavigation } from "./crosscut.mjs"
+
+/**
+ * Where this atlas came from. Without it "is the atlas stale?" cannot be asked at
+ * all — and a stale UI description is worse than none, because planning builds on
+ * it silently. The commit is the consumer's HEAD: the atlas describes the app as
+ * that code rendered it.
+ */
+function provenance(root) {
+  let commit = null
+  try {
+    commit = execFileSync("git", ["-C", root, "rev-parse", "--short", "HEAD"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim()
+  } catch {
+    // Not a git checkout, or git is absent. Say nothing rather than guess.
+  }
+  return { generated_at: new Date().toISOString(), generated_from_commit: commit }
+}
+
+/**
+ * ⚠ `--check` compares file CONTENT, so the timestamp alone would mark the index
+ * stale on every run — and a gate that always fires is a gate nobody keeps. These
+ * two lines, and only these, are excluded from that comparison.
+ */
+const PROVENANCE_LINE = /^(generated_at|generated_from_commit):/
+export const withoutProvenance = (text) =>
+  text.split("\n").filter((l) => !PROVENANCE_LINE.test(l)).join("\n")
 
 const slugForPattern = (pattern) =>
   pattern.replace(/^\//, "").replace(/[/[\]#]/g, "-").replace(/-+/g, "-").replace(/-$/, "") || "index"
@@ -211,6 +237,7 @@ export function writeScreens(screens, { root, outDir }) {
   const index = [
     frontmatter({
       generator: "set-atlas",
+      ...provenance(root),
       screens: ok.length,
       total_tokens: ok.reduce((a, s) => a + (s.stats.pageTokens ?? s.stats.mapTokens), 0),
     }),

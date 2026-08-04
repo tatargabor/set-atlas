@@ -238,7 +238,7 @@ export function renderMap(nodes, { visual = true, dataPatterns = [] } = {}) {
 
     const flow = visual ? flowFor(node, t.children.length + own.length) : ""
     lines.push(
-      `${pad}- ${roleFor(nodes, t, owned)}${title ? ` "${title}"` : ""} [${node.w}×${node.h}${flow ? ` ${flow}` : ""}]` +
+      `${pad}- ${roleFor(nodes, t, owned)}${node.testid ? ` #${node.testid}` : ""}${title ? ` "${title}"` : ""} [${node.w}×${node.h}${flow ? ` ${flow}` : ""}]` +
         `${notes.length ? " — " + notes.join(" · ") : ""}`
     )
     controls += own.length

@@ -10,7 +10,7 @@ import os from "node:os"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { createRequire } from "node:module"
-import { capture, writeScreens } from "./capture.mjs"
+import { capture, writeScreens, withoutProvenance } from "./capture.mjs"
 
 const args = process.argv.slice(2)
 const flag = (name) => {
@@ -83,7 +83,12 @@ if (checkOnly) {
   const dir = path.join(config.root, config.outDir)
   const stale = fs.readdirSync(tmp).filter((f) => {
     const current = path.join(dir, f)
-    return !fs.existsSync(current) || fs.readFileSync(current, "utf-8") !== fs.readFileSync(path.join(tmp, f), "utf-8")
+    // Compare what the UI produced, not when it was recorded — see
+    // `withoutProvenance`.
+    return (
+      !fs.existsSync(current) ||
+      withoutProvenance(fs.readFileSync(current, "utf-8")) !== withoutProvenance(fs.readFileSync(path.join(tmp, f), "utf-8"))
+    )
   })
   fs.rmSync(tmp, { recursive: true, force: true })
 

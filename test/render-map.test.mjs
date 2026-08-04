@@ -344,3 +344,23 @@ test("REGRESSION: controls inside a repeated row are records, not actions", () =
   assert.ok(names.includes("Új bejelentés"), "a real action must survive")
   assert.deepEqual(names.filter(n => /^\d+$/.test(n)), [], `row links leaked in: ${names}`)
 })
+
+test("a region with a testid says so — a name a human already gave it", () => {
+  // The `panel` label is the catch-all, and a census put it on 48% of regions. The
+  // annotation prototype showed the missing name was already in the data: the region
+  // the consumer had to identify from its size alone (`panel [483×796]`) carries
+  // `data-testid="email-viewer-panel"`. Zero heuristics — someone wrote that name for
+  // their own tests, and it is the one place the role guesser gives up.
+  const nodes = tree(() => [
+    node({ w: 1000, h: 800, dsp: "flex" }),
+    node({ p: 0, x: 0, w: 480, h: 700, testid: "email-viewer-panel" }),
+    node({ p: 1, tag: "button", name: "Válasz", w: 100, h: 40 }),
+    node({ p: 0, x: 500, w: 480, h: 700 }),
+    node({ p: 3, tag: "button", name: "Mentés", w: 100, h: 40 }),
+  ])
+
+  const { text } = renderMap(nodes)
+  assert.match(text, /panel #email-viewer-panel/, "the name that was already there went in the bin")
+  // A region with no testid must not gain a fake one.
+  assert.ok(text.split("\n").filter(l => l.includes("- panel")).some(l => !l.includes("#")))
+})

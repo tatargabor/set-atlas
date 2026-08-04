@@ -24,3 +24,4 @@ research/answers/
 research/*.json
 # Session scratch (dictation capture, copilot state) — never versioned.
 .set/
+research/annotated/

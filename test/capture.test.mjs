@@ -3,7 +3,7 @@ import assert from "node:assert/strict"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { writeScreens } from "../src/capture.mjs"
+import { writeScreens, withoutProvenance } from "../src/capture.mjs"
 
 const tmpRoot = () => fs.mkdtempSync(path.join(os.tmpdir(), "set-atlas-test-"))
 
@@ -64,4 +64,25 @@ test("a state on a distinct pattern does not collide with anything", () => {
   const root = tmpRoot()
   writeScreens([screen("/partnerek", "/partnerek", { state: "archived" })], { root, outDir: "atlas" })
   assert.ok(fs.existsSync(path.join(root, "atlas", "partnerek--archived.md")))
+})
+
+test("REGRESSION: provenance is recorded, and does not make --check fire on every run", () => {
+  // The atlas has to say where it came from — an atlas that cannot be dated cannot be
+  // called stale, and "a stale UI description is worse than none" is this tool's first
+  // principle. Measured 2026-08-04: three regenerations in one afternoon left no trace
+  // of when or from which commit any of them was made.
+  //
+  // ⚠ But `--check` compares file CONTENT, so a timestamp in the index would mark it
+  // stale on every single run — a gate that always fires is a gate nobody keeps. The
+  // provenance lines are therefore excluded from that comparison, and only from it.
+  const root = tmpRoot()
+  writeScreens([screen("/a", "/a")], { root, outDir: "atlas" })
+  const index = fs.readFileSync(path.join(root, "atlas", "INDEX.md"), "utf8")
+  assert.match(index, /^generated_at: \d{4}-\d{2}-\d{2}/m)
+
+  const later = index.replace(/^generated_at: .*$/m, "generated_at: 2099-01-01T00:00:00Z")
+  assert.notEqual(later, index)
+  assert.equal(withoutProvenance(later), withoutProvenance(index), "a re-run alone must not read as UI drift")
+  // Everything else still counts — this is a narrow exception, not a blanket one.
+  assert.notEqual(withoutProvenance(index.replace("/a", "/b")), withoutProvenance(index))
 })
