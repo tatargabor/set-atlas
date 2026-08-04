@@ -187,7 +187,22 @@ export function buildPointers(route, config, { maxDirect = 14, maxComponents = 1
   if (!source) return { source: null, ...(config.pointers?.(route, { source: null, components: [] }) ?? {}) }
 
   const components = collectComponents(source, config)
-  const uiComponents = components.filter((c) => /components?\//.test(c.file))
+  // What DRAWS the screen is decided by the extension, not the directory.
+  //
+  // ⚠ This filtered on `components/` until a consumer measured it, 2026-08-04:
+  // their route-local clients — `src/app/rendelesek/rendelesek-client.tsx`, ~7000
+  // lines behind a ~40-line page.tsx that only wraps it — appeared on no page at
+  // all, and `context --files` answered "no screen" for the most edited UI file
+  // in the app. Wrong in the reassuring direction: "no screen" reads as "no
+  // surface impact", which is the one question this package exists to ask.
+  //
+  // On three of their pages the old filter dropped 130 files, of which 121 were
+  // `.ts` — actions and lib, which belong to `actions:` and not here. The
+  // extension separates the two cleanly; the directory never did.
+  //
+  // Nearest first, so the cap cannot push a depth-1 client out behind shared
+  // components a level deeper.
+  const uiComponents = components.filter((c) => /\.(tsx|jsx)$/.test(c.file)).sort((a, b) => a.depth - b.depth)
   const allActions = collectServerActions(components, config)
 
   // Depth ≤ 1 means: the page, or a component the page imports directly. That is

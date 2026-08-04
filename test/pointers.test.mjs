@@ -178,3 +178,36 @@ test("a redirect to a path with no page file falls back, rather than losing the 
   const out = buildPointers({ url: "/quotes", pattern: "/quotes", redirectedTo: "/nowhere" }, { root })
   assert.equal(out.source, "src/app/quotes/page.tsx")
 })
+
+test("REGRESSION: a route-local client component is a component, wherever it sits", () => {
+  // Reported by the consumer 2026-08-04, measured on their tree: `components:`
+  // listed only files under `components/`, so `src/app/rendelesek/rendelesek-client.tsx`
+  // — ~7000 lines, with a ~40-line page.tsx that only wraps it — appeared on no
+  // page at all. `context --files` then answered "no screen" for the single most
+  // edited UI file in the app.
+  //
+  // ⚠ Wrong in the reassuring direction again: "no screen" reads as "this change
+  // has no surface", which is the exact question the tool exists to ask.
+  //
+  // The rule is the extension, not the directory: a .tsx the page imports draws
+  // something. Measured on three of their pages, everything the old filter
+  // dropped besides these was .ts — actions and lib, which belong to `actions:`.
+  const local = fs.mkdtempSync(path.join(os.tmpdir(), "atlas-local-"))
+  const w = (rel, body) => {
+    fs.mkdirSync(path.join(local, path.dirname(rel)), { recursive: true })
+    fs.writeFileSync(path.join(local, rel), body)
+  }
+  w("package.json", "{}")
+  w("src/app/orders/page.tsx", `import { OrdersClient } from "./orders-client"\n     import { db } from "@/lib/prisma"\n     export default function Page() { return <OrdersClient /> }`)
+  w("src/app/orders/orders-client.tsx", `import { Dialog } from "./credit-dialog"\n     export function OrdersClient() { return <Dialog /> }`)
+  w("src/app/orders/credit-dialog.tsx", `export function Dialog() { return null }`)
+  w("src/lib/prisma.ts", `export const db = {}`)
+
+  const out = buildPointers({ url: "/orders", pattern: "/orders" }, { root: local })
+  assert.ok(out.components.includes("src/app/orders/orders-client.tsx"), "the client the page wraps")
+  assert.ok(out.components.includes("src/app/orders/credit-dialog.tsx"), "and what it renders in turn")
+  assert.equal(out.components.includes("src/lib/prisma.ts"), false, "a .ts is logic — that is what `actions:` is for")
+  // The nearest files first: with the cap at 12, a depth-1 client must not be
+  // pushed out of the list by depth-2 shared components.
+  assert.equal(out.components[0], "src/app/orders/orders-client.tsx")
+})

@@ -81,7 +81,9 @@ function markStale(text, error) {
     `stale_reason: ${error}`,
     "---",
     "",
-    `> ⚠ **STALE** — this screen could not be re-recorded: ${error}.`,
+    // The message often ends in a full stop of its own — `exceeded..` reads as a typo
+    // in the one line that has to be believed.
+    `> ⚠ **STALE** — this screen could not be re-recorded: ${String(error).replace(/\.$/, "")}.`,
     "> What follows is the previous recording, and the screen may have changed since.",
     "",
     clean.slice(end + 5).replace(/^\n+/, ""),
