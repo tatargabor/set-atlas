@@ -52,8 +52,10 @@ node ../set-atlas/src/cli.mjs             # regenerate docs/atlas/
 node ../set-atlas/src/cli.mjs --check     # exit 1 if the UI moved
 ```
 
-Requires the screenshot user from `docs/manual/README.md`
-(`kezikonyv@wpcpont.hu` / `TestPassword123!`, ADMIN) — the psql upsert is in that file.
+The login comes from the consumer project's own config (`login()` in `atlas.config.mjs`,
+which reads `ATLAS_EMAIL` / `ATLAS_PASSWORD`) — set-atlas holds no credentials of its own.
+For this measurement environment the account and its psql upsert are in that project's
+`docs/manual/README.md`.
 
 ⚠ **The local database is a production copy.** Real partner names and amounts. That is
 exactly why the anonymization rule in `compress.mjs` exists — never relax it, and never
