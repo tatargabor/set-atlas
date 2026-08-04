@@ -13,7 +13,10 @@ const ARMS = process.env.ARMS ? process.env.ARMS.split(",") : ["screenshot", "ar
 const LABEL = {
   "region-pos": "vizuális réteggel",
   "region-nopos": "vizuális réteg nélkül",
-  screenshot: "a kép (plafon)",
+  // ⚠ Was labelled "a kép (plafon)" until the 2026-08-04 run measured it: the
+  // picture alone ties the coordinate-free region tree at 55/59 and loses to the
+  // hybrid, and it inverted BOTH designer questions on one screen. Not a ceiling.
+  screenshot: "a kép önmagában",
   "aria-flat": "S0 lapos aria (ma)",
   "geo-tree": "S1 geometria-fa",
   wireframe: "S2 wireframe",
