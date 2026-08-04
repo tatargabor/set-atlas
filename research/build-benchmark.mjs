@@ -15,6 +15,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import { regionTree, subtree, controlsIn, isScroller, childrenOf } from "./lib/regions.mjs"
+import { isRecordName } from "../src/compress.mjs"
 
 const CORPUS = path.join(import.meta.dirname, "corpus")
 // Whatever the recorder actually captured — no app's route names live in here.
@@ -279,6 +280,74 @@ function buildScreen(slug) {
       bucket,
       `${scroller.sh}px tartalom a ${scroller.ch}px keretben (${factor.toFixed(1)}×)`
     )
+  }
+
+  // ── Q_G · where a NEW element lands. Every question above asks where
+  // something IS; measured 2026-08-04, the arms stood at 98% on those, so one
+  // more of them measures nothing. The question a designer actually has is
+  // "where does the new thing go so that it fits", and its answer has to fall
+  // out of the container — otherwise the arms are being graded on taste.
+  //
+  // ⚠ The items above are NOT touched. A recorded run is keyed by item id, so
+  // changing what an id asks would re-score answers never given to it.
+  //
+  // Three measurements shaped the rule:
+  // (1) Requiring the anchor to be a direct-child button matched NOTHING on 33
+  //     screens — buttons are wrapped. The anchor is the lone named control of
+  //     a child box, which is what makes "the same group as X" unambiguous.
+  // (2) On /ajanlatok/new one anchor answered BOTH ways: it qualified in a row
+  //     container and in a column container one level up. The group a reader
+  //     sees is the tightest one, so the smallest container wins.
+  // (3) Only flex containers were considered and 8 screens yielded a balanced
+  //     pair; this app stacks vertically with plain `block` (Tailwind space-y),
+  //     and counting those took it to 20.
+  const groups = new Map()
+  // A name that occurs twice cannot anchor anything — „Vissza" is then two
+  // buttons and the arms would be graded on which one they happened to pick.
+  const nameCount = controls.reduce((a, c) => ((a[c.name] = (a[c.name] ?? 0) + 1), a), {})
+  // A record is not interface: the shipped format redacts it, so no arm could
+  // name it however good its structure is — and a question set built from a
+  // production-copy database should not be quoting customer data back at anyone.
+  const anchorable = (n) => nameCount[n.name] === 1 && !isRecordName(n.name)
+
+  for (const parent of nodes) {
+    if (!isContent(parent) || parent.w === 0 || parent.h === 0 || parent.vis === "hidden") continue
+    const flex = parent.dsp.includes("flex")
+    if (!flex && parent.dsp !== "block") continue
+    const kids = childrenOf(nodes, parent.i).filter((k) => k.w * k.h > 400 && k.vis !== "hidden" && inViewport(k, vp))
+    if (kids.length < 2 || kids.length > 12) continue
+    const order = [...kids].sort((a, b) => a.y - b.y || a.x - b.x)
+    const beside = order.every((k, i) => i === 0 || order[i - 1].x + order[i - 1].w <= k.x + 4)
+    const below = order.every((k, i) => i === 0 || order[i - 1].y + order[i - 1].h <= k.y + 4)
+    if (beside === below) continue // a wrapping row answers both ways — not asked
+    // The boxes and the CSS have to agree. `block` stacks vertically by
+    // definition; flex has to match its own direction.
+    if (flex ? parent.fd.startsWith("row") !== beside : beside) continue
+    for (const kid of kids) {
+      const named = controlsIn(nodes, subtree(nodes, kid.i)).filter((c) => nameable(c) && isContent(c) && anchorable(c))
+      if (named.length !== 1) continue
+      const prev = groups.get(named[0].name)
+      const area = parent.w * parent.h
+      if (!prev || area < prev.area) {
+        groups.set(named[0].name, { anchor: named[0], answer: beside ? "MELLÉ" : "ALÁ", siblings: kids.length, area, dsp: parent.dsp, fd: parent.fd })
+      }
+    }
+  }
+  // ⚠ Emitted only in BALANCED PAIRS. Left to itself the type ran 30 MELLÉ to
+  // 11 ALÁ across the corpus, so answering "MELLÉ" to everything scored 73%.
+  // Pairing per screen keeps it at 50% for ANY subset of screens a run picks.
+  const widest = (want) => [...groups.values()].filter((g) => g.answer === want).sort((a, b) => b.siblings - a.siblings)[0]
+  const [besideGroup, belowGroup] = [widest("MELLÉ"), widest("ALÁ")]
+  if (besideGroup && belowGroup) {
+    for (const g of [besideGroup, belowGroup]) {
+      add(
+        g.answer === "MELLÉ" ? "uj-elem-melle" : "uj-elem-ala",
+        "stack-direction",
+        `Ha a(z) „${g.anchor.name}" mellé egy új, hasonló elemet tennénk ugyanabba a csoportba, az a(z) „${g.anchor.name}" MELLÉ (vízszintesen, ugyanabba a sorba) vagy ALÁ (függőlegesen, új sorba) kerülne? Válasz: MELLÉ vagy ALÁ.`,
+        g.answer,
+        `${g.siblings} testvér egy ${g.dsp}${g.dsp.includes("flex") ? `/${g.fd}` : ""} tárolóban`
+      )
+    }
   }
 
   return { slug, title: meta.title, url: meta.url, archetype: meta.archetype, viewport: vp, items }

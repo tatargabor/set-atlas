@@ -217,15 +217,29 @@ export function wireframe(capture) {
 // numbers, or only the containment and the order?
 
 export function regionTreeText(capture) {
+  return regionTreeMarked(capture).text
+}
+
+/**
+ * The same tree, optionally numbered — and the boxes those numbers refer to.
+ *
+ * The numbers exist so a picture can carry the SAME ones (`build-hybrid.mjs`
+ * draws them onto the screenshot). Emitting both from one walk is the point: a
+ * key whose numbering is computed twice is a key that can disagree with itself.
+ */
+export function regionTreeMarked(capture, { numbered = false } = {}) {
   const { nodes, meta } = capture
   const tree = regionTree(nodes)
   const lines = [`# ${meta.title} — ${meta.url}`, ""]
+  const marks = []
 
   const walk = (t, depth) => {
     const n = t.node
     const side = depth === 0 ? "" : ` [${n.w}×${n.h}]`
+    marks.push({ n: marks.length + 1, depth, x: n.x, y: n.y, w: n.w, h: n.h })
+    const tag = numbered ? `[${marks.length}] ` : ""
     lines.push(
-      `${"  ".repeat(depth)}▸ ${roleOf(nodes, t)}${side}` +
+      `${"  ".repeat(depth)}▸ ${tag}${roleOf(nodes, t)}${side}` +
         `${t.overlay ? " — a mögötte lévő tartalom fölé nyílik" : ""}` +
         `${t.inset ? ` — ${t.inset.inner}px széles sáv a ${t.inset.outer}px területen, középre` : ""}` +
         `${scrollNote(n)}` +
@@ -235,7 +249,37 @@ export function regionTreeText(capture) {
     t.children.forEach((c) => walk(c, depth + 1))
   }
   walk(tree, 0)
-  return lines.join("\n")
+  return { text: lines.join("\n"), marks }
+}
+
+/* ──────────────────────────── S6 · hybrid ───────────────────────────── */
+// The picture and the text, carrying the same numbers.
+//
+// Its text is S3 with `[n]` on every region, so the contrast against S3 is
+// exactly ONE thing: the annotated screenshot. The image itself is written by
+// `build-hybrid.mjs`; this side only has to number the regions identically.
+//
+// ⚠ The picture does not replace the text and is not allowed to: it is neither
+// greppable nor diffable, so `--check`, the cross-section and the change
+// promise all stay textual. It is measured as an ADDITION, never a substitute.
+
+export function hybridText(capture) {
+  const { text, marks } = regionTreeMarked(capture, { numbered: true })
+  const vp = capture.meta.viewport
+  // The corpus screenshot is viewport-only (`page.screenshot()` with no
+  // fullPage), so a region that starts below the fold has a number in this list
+  // and no box in the picture. Saying which ones is not optional — a reader who
+  // cannot find [23] must know it is missing, not assume they misread the image.
+  const offscreen = marks.filter((m) => m.y >= vp.h || m.x >= vp.w)
+  const head = [
+    text.split("\n")[0],
+    "",
+    `A számok a mellékelt annotált képernyőképen bekeretezett dobozokat jelölik — ugyanaz a szám, ugyanaz a doboz.`,
+    offscreen.length
+      ? `⚠ A kép a ${vp.w}×${vp.h} látómezőt mutatja, ezért ${offscreen.length} régió (${offscreen.map((m) => `[${m.n}]`).join(", ")}) nem látszik rajta; azokról csak ez a lista szól.`
+      : `A kép a teljes ${vp.w}×${vp.h} látómezőt mutatja, minden felsorolt régió szerepel rajta.`,
+  ].join("\n")
+  return [head, ...text.split("\n").slice(1)].join("\n")
 }
 
 /* ───────────────────────────── S5 · jsx-dsl ─────────────────────────── */
@@ -274,4 +318,5 @@ export const VARIANTS = {
   wireframe: { label: "S2 · ASCII wireframe + régiónkénti lista", build: wireframe, deterministic: true },
   "region-tree": { label: "S3 · régió-fa szerepcímkékkel, koordináták nélkül", build: regionTreeText, deterministic: true },
   "jsx-dsl": { label: "S5 · JSX-szerű layout-DSL", build: jsxDsl, deterministic: true },
+  hybrid: { label: "S6 · számozott régió-fa + annotált képernyőkép", build: hybridText, deterministic: true, image: true },
 }

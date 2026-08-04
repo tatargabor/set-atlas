@@ -9,7 +9,7 @@ import { estimateTokens } from "./lib/variants.mjs"
 
 const HERE = import.meta.dirname
 const benchmark = JSON.parse(fs.readFileSync(path.join(HERE, "benchmark.json"), "utf8"))
-const ARMS = process.env.ARMS ? process.env.ARMS.split(",") : ["screenshot", "aria-flat", "geo-tree", "wireframe", "region-tree", "jsx-dsl"]
+const ARMS = process.env.ARMS ? process.env.ARMS.split(",") : ["screenshot", "aria-flat", "geo-tree", "wireframe", "region-tree", "jsx-dsl", "hybrid"]
 const LABEL = {
   "region-pos": "vizuális réteggel",
   "region-nopos": "vizuális réteg nélkül",
@@ -19,6 +19,7 @@ const LABEL = {
   wireframe: "S2 wireframe",
   "region-tree": "S3 régió-fa",
   "jsx-dsl": "S5 JSX-DSL",
+  hybrid: "S6 fa + annot. kép",
 }
 
 const truth = new Map()
@@ -89,8 +90,12 @@ for (const arm of ARMS) {
     results[arm].right += right
     // The picture costs image tokens, not text tokens — a 3200×2000 PNG is
     // roughly 1.6k tokens at Claude's tiling. Reported, not compared as text.
+    // The hybrid arm pays BOTH, which is the whole question about it: the
+    // annotated picture has to be worth the 1.6k it adds to the region tree.
     const variantFile = path.join(HERE, "variants", arm, `${screen.slug}.md`)
-    results[arm].tokens += arm === "screenshot" ? 1600 : estimateTokens(fs.readFileSync(variantFile, "utf8"))
+    const IMAGE_TOKENS = 1600
+    results[arm].tokens +=
+      arm === "screenshot" ? IMAGE_TOKENS : estimateTokens(fs.readFileSync(variantFile, "utf8")) + (arm === "hybrid" ? IMAGE_TOKENS : 0)
   }
 }
 

@@ -11,7 +11,7 @@ import path from "node:path"
 
 const HERE = import.meta.dirname
 const benchmark = JSON.parse(fs.readFileSync(path.join(HERE, "benchmark.json"), "utf8"))
-const ARMS = process.env.ARMS ? process.env.ARMS.split(",") : ["aria-flat", "geo-tree", "wireframe", "region-tree", "jsx-dsl"]
+const ARMS = process.env.ARMS ? process.env.ARMS.split(",") : ["aria-flat", "geo-tree", "wireframe", "region-tree", "jsx-dsl", "hybrid"]
 const OUT = path.join(HERE, "prompts")
 
 const RULES = `Egyetlen képernyőről kapsz leírást, és kérdéseket kell megválaszolnod róla.
@@ -35,9 +35,20 @@ for (const screen of benchmark.screens) {
   for (const arm of ARMS) {
     const body = fs.readFileSync(path.join(HERE, "variants", arm, `${screen.slug}.md`), "utf8")
     fs.mkdirSync(path.join(OUT, arm), { recursive: true })
+    // The hybrid arm is the one contestant that gets BOTH — the numbered region
+    // tree and a picture wearing the same numbers. Its rule has to name the one
+    // file it may open, or "do not open any file" would forbid its own image.
+    const shot = path.join(HERE, "variants", "hybrid", `${screen.slug}.png`)
+    const rules =
+      arm === "hybrid"
+        ? RULES.replace(
+            "Ne nyiss meg semmilyen fájlt, ne futtass parancsot, ne keress a projektben.",
+            `A leíráshoz tartozik EGY annotált képernyőkép, ezt nyisd meg a Read eszközzel: \`${shot}\` — a képen bekeretezett dobozok számai ugyanazok, mint a lenti fában. MÁS fájlt ne nyiss meg, ne futtass parancsot, ne keress a projektben.`
+          )
+        : RULES
     fs.writeFileSync(
       path.join(OUT, arm, `${screen.slug}.md`),
-      [RULES, "", "---", "", "## A képernyő leírása", "", body, "", "---", "", "## Kérdések", "", questions, ""].join("\n")
+      [rules, "", "---", "", "## A képernyő leírása", "", body, "", "---", "", "## Kérdések", "", questions, ""].join("\n")
     )
   }
 
