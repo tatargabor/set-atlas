@@ -22,6 +22,12 @@ research/variants/
 research/prompts/
 research/answers/
 research/*.json
+# The working log is deliberately NOT versioned, and was removed from the history when
+# this repo went public on 2026-08-04. It is written in Hungarian and it describes the
+# consumer app it was measured against — route names, component names, commit ids of a
+# codebase that is not ours to publish. A reader of THIS repo needs the README; the log
+# belongs on the machine that does the measuring.
+docs/allapot.md
 # Session scratch (dictation capture, copilot state) — never versioned.
 .set/
 research/annotated/

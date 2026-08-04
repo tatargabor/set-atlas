@@ -108,7 +108,13 @@ the consumer's atlas is stale. A handoff that reports only `node --test` is the 
 
 ## Current state and open work
 
-👉 **[`docs/allapot.md`](docs/allapot.md)** — read this first. It carries the measurements
+👉 **`docs/allapot.md`** — read this first *if it is there*. It carries the measurements
 (so you don't re-measure), the design decisions with their reasons, and the ranked open
 list. Keep it current: when something lands or a decision is made, update that file, not
 a new one beside it.
+
+⚠ **It is not in the repo, and never will be** (`.gitignore`, removed from the history on
+2026-08-04 when this went public): it is a Hungarian working log that describes the
+consumer app it was measured against. So a fresh clone does NOT have it — on a machine
+without it, the measurements below are all you have, and §2 of that file is gone. Do not
+recreate it from memory; write what you measure yourself.
