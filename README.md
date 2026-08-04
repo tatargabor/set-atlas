@@ -57,6 +57,29 @@ npx set-atlas --check    # exit 1 if the atlas is stale (git hook / CI)
 npx set-atlas --diff     # same gate, and prints WHICH lines moved
 ```
 
+### Planning on it — `integrations/openspec/`
+
+The atlas only pays for itself if the agent that plans the work reads it, and nothing makes that
+happen on its own. Three pieces, each usable without the others:
+
+```bash
+npx set-atlas context --change <change-name>
+```
+
+picks the few screens a specific change concerns — measured on a real change: **5 of 33 screens,
+~5k tokens instead of ~39k** — says why each was picked, names the ones the cap dropped, and adds
+the screens one link away that the change never mentions. It drives no browser, so planning works
+on a machine where the app isn't even running.
+
+- [`integrations/openspec/proposal-section.md`](integrations/openspec/proposal-section.md) — the
+  `## Surface fit` section, and which failure each of its questions catches.
+- [`integrations/openspec/SKILL.md`](integrations/openspec/SKILL.md) — a Claude Code skill to copy
+  into the consuming project.
+
+The neighbourhood deliberately excludes links present on over 60% of screens: with the app's
+sidebar counted, *"one link away"* listed 25 screens, 24 of them furniture. What it excluded is
+printed with the count.
+
 ### Did the change reach the UI?
 
 `--check` answers yes or no, which is all a hook needs. `--diff` is the same gate — writes

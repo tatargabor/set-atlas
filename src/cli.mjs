@@ -5,6 +5,7 @@
 //   npx set-atlas --config path.mjs
 //   npx set-atlas --check             # writes nothing; exits 1 if the atlas is stale
 //   npx set-atlas --diff              # same gate, but prints WHICH lines moved
+//   npx set-atlas context --change X  # the few screens THIS change concerns (no browser)
 
 import fs from "node:fs"
 import os from "node:os"
@@ -13,6 +14,7 @@ import { pathToFileURL } from "node:url"
 import { createRequire } from "node:module"
 import { capture, writeScreens, withoutProvenance, slugFor } from "./capture.mjs"
 import { formatDiff } from "./diff.mjs"
+import { buildContext } from "./context.mjs"
 
 const args = process.argv.slice(2)
 const flag = (name) => {
@@ -28,6 +30,31 @@ if (!fs.existsSync(configPath)) {
 
 const config = (await import(pathToFileURL(configPath).href)).default
 config.root ??= path.dirname(configPath)
+
+// `context` reads the atlas that is already on disk — it drives no browser and
+// must not require one. Handled before Playwright is resolved so that planning
+// works on a machine where the app isn't even installed.
+if (args[0] === "context") {
+  const name = flag("--change")
+  if (typeof name !== "string") {
+    console.error("Usage: npx set-atlas context --change <change-name> [--top 5]")
+    process.exit(1)
+  }
+  const atlasDir = path.join(config.root, config.outDir)
+  const changeDir = path.join(config.root, config.changesDir ?? "openspec/changes", name)
+  for (const [what, dir] of [
+    ["atlas", atlasDir],
+    ["change", changeDir],
+  ]) {
+    if (!fs.existsSync(dir)) {
+      console.error(`No ${what} directory at ${dir}`)
+      process.exit(1)
+    }
+  }
+  const top = Number(flag("--top")) || 5
+  console.log(buildContext({ atlasDir, changeDir, changeName: name, top }))
+  process.exit(0)
+}
 
 // Resolve Playwright from the CONSUMING project, not from set-atlas's own folder.
 // Without this, `npx set-atlas` looks inside its own (empty) node_modules and
