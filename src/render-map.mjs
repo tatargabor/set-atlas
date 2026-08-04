@@ -103,7 +103,7 @@ function roleFor(nodes, tree, owned) {
   // exact (257, 25, 25 and 6 rows on four real screens). Restricted to elements
   // that are actually tables: any container with four repeated children would
   // otherwise start calling itself one.
-  const rows = ownRows || (isTable ? repeatedBelow(tree) : 0)
+  const rows = ownRows || (isTable ? rowsBelow(tree) : 0)
   // No number beats a wrong number. A stated `0 rows` cannot be told apart from a
   // genuinely empty table, and it is the field a reader is most likely to trust.
   if (isTable || rows > 3) return rows ? `table (${rows} rows)` : "table"
@@ -120,11 +120,25 @@ function roleFor(nodes, tree, owned) {
 
 const isControl = (n) => CONTROL_TAGS.has(n.tag) || CONTROL_ROLES.has(n.role)
 
-/** The largest repeated run anywhere below this region — a table's row count. */
-function repeatedBelow(tree) {
-  let best = 0
-  for (const child of tree.children) best = Math.max(best, child.repeat ?? 0, repeatedBelow(child))
-  return best
+/**
+ * How many rows sit below this region, counted from the repeated runs.
+ *
+ * ⚠ Rows do NOT arrive as one run. Measured on a real bug tracker: 58 table rows split into
+ * runs of 11, 44 and 3, because rows that differ structurally do not collapse together. The
+ * first version took the LARGEST run and printed 44 — and 44 happened to be a real number on
+ * that screen (the count of one status), with a plausible row height to match. Two signals
+ * agreeing is not corroboration when both come from the same blind spot.
+ *
+ * The largest run decides what a row IS here, and every run of that same element adds up.
+ * Without the tag check an eleven-column table counts its `col` elements as rows.
+ */
+function rowsBelow(tree) {
+  const runs = []
+  const collect = t => { for (const c of t.children) { if (c.repeat) runs.push(c); collect(c) } }
+  collect(tree)
+  if (!runs.length) return 0
+  const widest = runs.reduce((a, b) => (b.repeat > a.repeat ? b : a))
+  return runs.filter(r => r.node.tag === widest.node.tag).reduce((sum, r) => sum + r.repeat, 0)
 }
 
 /**

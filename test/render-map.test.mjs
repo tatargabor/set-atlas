@@ -289,3 +289,33 @@ test("a table whose rows cannot be counted states no number rather than a wrong 
   assert.match(text, /- table \[/, "expected a bare `table` label")
   assert.doesNotMatch(text, /0 rows/)
 })
+
+test("REGRESSION: a table's rows are the SUM of its repeated runs, not the largest one", () => {
+  // Measured 2026-08-04 on a real bug-tracker screen: the label said 44 rows over a table
+  // whose DOM held 58. The rows had split into three repeated runs (11 + 44 + 3, because
+  // rows that differ structurally do not collapse together) and the count took the biggest.
+  //
+  // ⚠ Why it survived review: 44 was ALSO a real number on that screen — the count of one
+  // status — and the region height divided by it gave a plausible row height. Two signals
+  // agreeing is not corroboration when both come from the same blind spot.
+  //
+  // The run tag decides what counts as a row: `col` elements repeat too, and a table with
+  // eleven columns is not eleven rows.
+  const nodes = tree(() => {
+    const out = [node({ w: 1500, h: 1000 }), node({ p: 0, tag: "table", w: 1451, h: 900 })]
+    let y = 0
+    // Three runs of `tr`, plus a run of `col` that must not be mistaken for rows.
+    for (const [count, cls] of [[11, "a"], [44, "b"], [3, "c"]]) {
+      for (let r = 0; r < count; r++) {
+        const row = next
+        out.push(node({ p: 1, tag: "tr", w: 1451, h: 33, y: (y += 33), testid: `row-${cls}` }))
+        out.push(node({ p: row, tag: "td", w: 700, h: 33, y, name: `cell ${cls}${r}` }))
+      }
+    }
+    for (let c = 0; c < 11; c++) out.push(node({ p: 1, tag: "col", w: 96, h: 900 }))
+    return out
+  })
+
+  const { text } = renderMap(nodes)
+  assert.match(text, /table \(58 rows\)/, "expected 11 + 44 + 3 rows, not the largest run alone")
+})
