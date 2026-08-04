@@ -86,3 +86,50 @@ test("REGRESSION: provenance is recorded, and does not make --check fire on ever
   // Everything else still counts — this is a narrow exception, not a blanket one.
   assert.notEqual(withoutProvenance(index.replace("/a", "/b")), withoutProvenance(index))
 })
+
+test("REGRESSION: a screen that could not be recorded says so ON ITS OWN PAGE", () => {
+  // Measured 2026-08-04: `/leltar/[id]` failed to record (`ariaSnapshot did not
+  // settle after a retry`), and its page from the PREVIOUS run stayed in
+  // docs/atlas/ unchanged. The run printed `✗`, INDEX.md listed it under
+  // "Could not be recorded" — but the page itself said nothing, so a reader who
+  // opened that one file had no way to know it described an older UI.
+  //
+  // Deleting it is the wrong repair, and the consumer's argument is why: a
+  // deleted page and a screen that never existed look identical from outside.
+  // The page stays; it stops claiming to be current.
+  const root = tmpRoot()
+  const page = path.join(root, "atlas", "leltar-id.md")
+
+  writeScreens([screen("/leltar/1", "/leltar/[id]")], { root, outDir: "atlas" })
+  assert.ok(fs.readFileSync(page, "utf8").includes('button "/leltar/1"'))
+
+  const failing = [screen("/leltar/1", "/leltar/[id]", { error: "ariaSnapshot did not settle after a retry" })]
+  writeScreens(failing, { root, outDir: "atlas" })
+  const marked = fs.readFileSync(page, "utf8")
+  assert.match(marked, /^stale_since: \d{4}-\d{2}-\d{2}/m, "a machine reader has to be able to filter it")
+  assert.match(marked, /ariaSnapshot did not settle/, "and it has to say WHY the recording failed")
+  assert.ok(marked.includes('button "/leltar/1"'), "the previous recording is kept, not thrown away")
+
+  // ⚠ The failure repeats every run until someone fixes the screen, so the mark
+  // must replace itself rather than stack. Two runs, one mark.
+  writeScreens(failing, { root, outDir: "atlas" })
+  const twice = fs.readFileSync(page, "utf8")
+  assert.equal(twice.match(/^stale_since:/gm).length, 1)
+  assert.equal(twice.match(/could not be re-recorded/g).length, 1)
+
+  // ⚠ And the same trap as the index timestamp: the screen fails again on every
+  // run, so `stale_since` moves while nothing about the UI has. `--check` must
+  // fire ONCE — when the page went stale — not on every run afterwards.
+  assert.notEqual(twice, marked, "the timestamp did move")
+  assert.equal(withoutProvenance(twice), withoutProvenance(marked), "a repeated failure alone must not read as UI drift")
+  // The reason is not exempt: becoming stale, or stale for a different reason,
+  // is a real change to the atlas.
+  const otherReason = markedFor(root, page, "the route now 404s")
+  assert.notEqual(withoutProvenance(otherReason), withoutProvenance(twice))
+})
+
+/** Re-runs the same failing screen with a different error and returns the page. */
+function markedFor(root, page, error) {
+  writeScreens([screen("/leltar/1", "/leltar/[id]", { error })], { root, outDir: "atlas" })
+  return fs.readFileSync(page, "utf8")
+}

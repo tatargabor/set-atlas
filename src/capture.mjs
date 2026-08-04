@@ -31,9 +31,15 @@ function provenance(root) {
 /**
  * ⚠ `--check` compares file CONTENT, so the timestamp alone would mark the index
  * stale on every run — and a gate that always fires is a gate nobody keeps. These
- * two lines, and only these, are excluded from that comparison.
+ * lines, and only these, are excluded from that comparison.
+ *
+ * `stale_since` is here for the same reason and no other: a screen that fails to
+ * record fails again on the next run, so its timestamp moves every time while
+ * nothing about the UI has changed. `stale_reason` is NOT excluded — a page that
+ * becomes stale, or becomes stale for a different reason, is a real change and
+ * has to fire the gate once.
  */
-const PROVENANCE_LINE = /^(generated_at|generated_from_commit):/
+const PROVENANCE_LINE = /^(generated_at|generated_from_commit|stale_since):/
 export const withoutProvenance = (text) =>
   text.split("\n").filter((l) => !PROVENANCE_LINE.test(l)).join("\n")
 
@@ -47,6 +53,40 @@ const slugForPattern = (pattern) =>
  */
 const slugFor = (screen) =>
   screen.state ? `${slugForPattern(screen.pattern)}--${screen.state}` : slugForPattern(screen.pattern)
+
+/**
+ * A screen that could not be recorded keeps the page from its last good run —
+ * and stops claiming to be current.
+ *
+ * ⚠ Deleting it is the wrong repair, and the consumer's argument (2026-08-04) is
+ * why: from outside, a deleted page and a screen that never existed look exactly
+ * the same. The run already prints `✗` and INDEX.md lists the failure, but a
+ * reader who opens the one file sees neither.
+ *
+ * The mark REPLACES itself rather than stacking: the same screen fails again on
+ * every run until someone fixes it.
+ */
+const unmarkStale = (text) =>
+  text.replace(/^stale_(since|reason): .*\n/gm, "").replace(/^> ⚠ \*\*STALE\*\*.*\n(?:>.*\n)*\n/gm, "")
+
+function markStale(text, error) {
+  const clean = unmarkStale(text)
+  const end = clean.indexOf("\n---\n", 4)
+  // Not a page this tool wrote — leave it exactly as it is rather than guess.
+  if (!clean.startsWith("---\n") || end < 0) return null
+  return [
+    "---",
+    clean.slice(4, end),
+    `stale_since: ${new Date().toISOString()}`,
+    `stale_reason: ${error}`,
+    "---",
+    "",
+    `> ⚠ **STALE** — this screen could not be re-recorded: ${error}.`,
+    "> What follows is the previous recording, and the screen may have changed since.",
+    "",
+    clean.slice(end + 5).replace(/^\n+/, ""),
+  ].join("\n")
+}
 
 function frontmatter(fields) {
   const lines = []
@@ -234,6 +274,16 @@ export function writeScreens(screens, { root, outDir }) {
 
   const ok = screens.filter((s) => !s.error)
   const failed = screens.filter((s) => s.error)
+
+  // The page left behind by the last good run says so on itself, not only in the
+  // index — see markStale.
+  for (const screen of failed) {
+    const file = path.join(dir, `${slugFor(screen)}.md`)
+    if (!fs.existsSync(file)) continue
+    const marked = markStale(fs.readFileSync(file, "utf8"), screen.error)
+    if (marked) fs.writeFileSync(file, marked)
+  }
+
   const index = [
     frontmatter({
       generator: "set-atlas",

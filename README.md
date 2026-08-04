@@ -56,6 +56,25 @@ npx set-atlas            # regenerate
 npx set-atlas --check    # exit 1 if the atlas is stale (git hook / CI)
 ```
 
+### When a screen can't be recorded
+
+Some screens fail — a page that never settles, a route that started 404ing. That screen's page
+from the last good run **stays**, because a deleted page and a screen that never existed look
+identical from outside. What changes is that the page stops claiming to be current:
+
+```yaml
+stale_since: 2026-08-04T13:08:00.414Z
+stale_reason: ariaSnapshot did not settle after a retry
+```
+
+followed by a `> ⚠ **STALE**` note above the map. The run prints `✗`, `INDEX.md` lists the screen
+under *Could not be recorded*, and now the file itself says so too — the reader who opens one page
+is the one who would otherwise never find out.
+
+`--check` fires **once**, when a page goes stale or its reason changes. `stale_since` moves on
+every run while the screen stays broken, so it is excluded from the comparison for the same reason
+`generated_at` is: a gate that always fires is a gate nobody keeps.
+
 ## What a page looks like
 
 ```yaml
