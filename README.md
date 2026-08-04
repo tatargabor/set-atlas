@@ -54,7 +54,34 @@ result — if the pages changed, the surface changed.
 ```bash
 npx set-atlas            # regenerate
 npx set-atlas --check    # exit 1 if the atlas is stale (git hook / CI)
+npx set-atlas --diff     # same gate, and prints WHICH lines moved
 ```
+
+### Did the change reach the UI?
+
+`--check` answers yes or no, which is all a hook needs. `--diff` is the same gate — writes
+nothing, exits 1 on a change — and prints the lines, which is what someone asking *"did the
+change I just made actually reach the surface, and where?"* needs:
+
+```
+docs/atlas/search.md
+    regions: 5
+  - map_tokens: 433
+  + map_tokens: 437
+  …
+      - panel [1536×1000 column]
+  -     - toolbar strip "Advanced search" [1536×56 row]
+  +     - toolbar strip #app-header "Advanced search" [1536×56 row]
+```
+
+Nothing else measures this. The tests check behaviour and the spec states intent; the gap
+between them is where a feature ships redundantly or unreachable — which is the failure this
+package was extracted from.
+
+Both flags also report pages that are **on disk but were not produced by this run** — a route
+deleted from the app or dropped from the config. Comparing only the freshly recorded pages made
+those invisible, so the atlas kept describing a screen that no longer existed while the gate
+reported it up to date.
 
 ### When a screen can't be recorded
 

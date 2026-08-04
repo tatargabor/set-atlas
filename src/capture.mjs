@@ -51,7 +51,7 @@ const slugForPattern = (pattern) =>
  * by a query parameter or a setup step. To the framework these are one route; to
  * someone designing on the screen they are two, and they can differ completely.
  */
-const slugFor = (screen) =>
+export const slugFor = (screen) =>
   screen.state ? `${slugForPattern(screen.pattern)}--${screen.state}` : slugForPattern(screen.pattern)
 
 /**

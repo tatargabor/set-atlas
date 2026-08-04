@@ -4,13 +4,15 @@
 //   npx set-atlas                     # reads atlas.config.mjs from the repo root
 //   npx set-atlas --config path.mjs
 //   npx set-atlas --check             # writes nothing; exits 1 if the atlas is stale
+//   npx set-atlas --diff              # same gate, but prints WHICH lines moved
 
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { createRequire } from "node:module"
-import { capture, writeScreens, withoutProvenance } from "./capture.mjs"
+import { capture, writeScreens, withoutProvenance, slugFor } from "./capture.mjs"
+import { formatDiff } from "./diff.mjs"
 
 const args = process.argv.slice(2)
 const flag = (name) => {
@@ -52,7 +54,13 @@ if (!chromium) {
   process.exit(1)
 }
 
-const checkOnly = args.includes("--check")
+// `--diff` is the same gate as `--check` — it writes nothing and exits 1 on a
+// change — and prints the lines. A hook wants the exit code; a person or an agent
+// asking "did the change I just made reach the UI, and where?" wants the lines,
+// and today nothing answers that: the tests measure behaviour, the spec states
+// intent, and the gap between them is where a feature ships unreachable.
+const showDiff = args.includes("--diff")
+const checkOnly = args.includes("--check") || showDiff
 const screens = await capture(
   { ...config, outDir: checkOnly ? null : config.outDir },
   {
@@ -81,20 +89,44 @@ if (checkOnly) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "set-atlas-"))
   writeScreens(screens, { root: tmp, outDir: "." })
   const dir = path.join(config.root, config.outDir)
-  const stale = fs.readdirSync(tmp).filter((f) => {
-    const current = path.join(dir, f)
-    // Compare what the UI produced, not when it was recorded — see
-    // `withoutProvenance`.
-    return (
-      !fs.existsSync(current) ||
-      withoutProvenance(fs.readFileSync(current, "utf-8")) !== withoutProvenance(fs.readFileSync(path.join(tmp, f), "utf-8"))
-    )
-  })
+  const read = (file) => (fs.existsSync(file) ? withoutProvenance(fs.readFileSync(file, "utf-8")) : null)
+  const produced = fs.readdirSync(tmp)
+  const stale = produced.filter((f) => read(path.join(dir, f)) !== read(path.join(tmp, f)))
+
+  // ⚠ Pages on disk that this run did NOT produce — a route deleted from the app
+  // or dropped from the config. Comparing only what was just recorded made those
+  // invisible, so the atlas kept describing a screen that no longer exists and
+  // `--check` said it was up to date. That is precisely "a stale map is worse
+  // than none", inside the gate meant to prevent it.
+  //
+  // ⚠ A screen that FAILED to record is not orphaned — it is a known failure,
+  // already printed as `✗` and already marked stale on its own page. It produces
+  // no file this run, so without this it would be reported as a deleted route
+  // every single time (measured: `/leltar/[id]` fails on every run).
+  const known = new Set([...produced, ...failed.map((s) => `${slugFor(s)}.md`)])
+  const orphaned = fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith(".md") && !known.has(f))
+    .filter((f) => (read(path.join(dir, f)) ?? "").includes("route:") || ["INDEX.md", "ACTIONS.md", "NAVIGATION.md"].includes(f))
+
+  if (showDiff) {
+    for (const f of stale) {
+      const before = read(path.join(dir, f))
+      console.error(`\n${path.join(config.outDir, f)}${before === null ? "   (new)" : ""}`)
+      for (const line of formatDiff(before ?? "", read(path.join(tmp, f)))) console.error(line)
+    }
+    for (const f of orphaned) console.error(`\n${path.join(config.outDir, f)}   ⚠ on disk, but this run did not produce it — the route may be gone`)
+  }
   fs.rmSync(tmp, { recursive: true, force: true })
 
-  if (stale.length) {
-    console.error(`\n⚠ The UI changed — ${stale.length} page(s) are stale:\n  ${stale.join("\n  ")}`)
-    console.error("\nRegenerate with `npx set-atlas`, then review whether the intent layer needs updating.")
+  if (stale.length || orphaned.length) {
+    if (stale.length) console.error(`\n⚠ The UI changed — ${stale.length} page(s) are stale:\n  ${stale.join("\n  ")}`)
+    if (orphaned.length) console.error(`\n⚠ ${orphaned.length} page(s) on disk were not produced by this run:\n  ${orphaned.join("\n  ")}`)
+    console.error(
+      showDiff
+        ? "\nRegenerate with `npx set-atlas`, then review whether the intent layer needs updating."
+        : "\nRegenerate with `npx set-atlas` (or `--diff` to see which lines moved), then review whether the intent layer needs updating."
+    )
     process.exit(1)
   }
   console.log("\n✓ Atlas is up to date.")
