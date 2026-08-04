@@ -87,6 +87,18 @@ is not a source of truth; if it is not written down, it was not decided.**
   runtime dependencies and one optional peer (Playwright, supplied by the consumer).
 - Do not pin a browser version on consumers — `chromium` is passed in by the caller.
 
+## Session handoff
+
+Before switching sessions or running low on budget: `/handoff` writes this thread's open work
+and **measured** state to `.set/handoff/<ID>--<slug>.md` and prints the ID; the successor loads
+it with `/handoff <ID>`. The skill comes from
+[set-claude-handoff](https://github.com/tatargabor/set-claude-handoff) and is generic —
+**everything specific to this repo lives in `.claude/handoff.profile.md`** (versioned; the
+skill file is not edited here, it is overwritten by `npx github:tatargabor/set-claude-handoff init`).
+
+Note what the profile says about the third probe: the generator can be green and committed while
+the consumer's atlas is stale. A handoff that reports only `node --test` is the typical miss.
+
 ## Current state and open work
 
 👉 **[`docs/allapot.md`](docs/allapot.md)** — read this first. It carries the measurements

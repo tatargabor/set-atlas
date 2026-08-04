@@ -3,7 +3,14 @@ dist/
 *.log
 .DS_Store
 atlas.config.mjs
-.claude/
+# Claude Code: the /handoff integration IS versioned — the skill and this project's probes
+# are part of how the repo is worked on, and a fresh clone without them silently loses it.
+# Machine-local settings (hook paths, tokens) and session locks are not.
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/handoff/
+!.claude/handoff.profile.md
 # Everything the research harness GENERATES comes from a production-copy database
 # — real names, real email addresses, real amounts. Scripts are versionable; their
 # output never is. Verified 2026-08-04: variants/ and prompts/ held 300+ lines of
