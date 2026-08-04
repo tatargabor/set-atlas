@@ -27,7 +27,7 @@ everything to whoever is deciding where a new button goes.
 So the layout is recovered from the rendered boxes and printed as a region tree.
 
 Measured blind on six layout archetypes — six formats, 46 questions with answers computed from
-geometry rather than judged ([the study](docs/kutatas/2026-08-04-vizualis-megertes.md), in Hungarian):
+geometry rather than judged (the full study lives with the app it was measured on, not in this package):
 
 | format | correct | tokens |
 |---|---|---|

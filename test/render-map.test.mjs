@@ -246,3 +246,46 @@ test("in-bar placement marks only what is not on the left", () => {
   assert.doesNotMatch(text, /"Filters" \[/, "the left end carries no marker")
   assert.doesNotMatch(renderMap(nodes, { visual: false }).text, /\[right\]/, "the visual layer must be switchable off")
 })
+
+test("REGRESSION: a table never claims 0 rows while its rows are right below it", () => {
+  // Reported 2026-08-04 by the atlas's first consumer, on four screens at once:
+  //   partnerek.md     table (0 rows) [1486×1022]   ← repeated item ×25 under it
+  //   dokumentumok.md  table (0 rows) [1486×1265]   ← repeated item ×25
+  //   ajanlatok-id.md  table (0 rows) [1086×310]    ← 6 real line items
+  // The count only looked at what the region DIRECTLY owns, but rows become
+  // child regions of their own — so they were never in that set. The consumer
+  // was nearly misled into reporting an empty consignment as a bug.
+  //
+  // ⚠ This is worse than the missing field it was meant to replace: a stated
+  // number that says zero is indistinguishable from a genuinely empty table,
+  // and it is exactly the field that invites a reader to trust it. Where the
+  // count cannot be established, the label carries no number at all — `table`
+  // on its own is still a true statement.
+  const nodes = tree(() => {
+    const out = [node({ w: 1486, h: 1122 }), node({ p: 0, tag: "table", w: 1486, h: 1022 })]
+    for (let r = 0; r < 25; r++) {
+      const row = next
+      out.push(node({ p: 1, tag: "tr", w: 1486, h: 40, y: r * 40 }))
+      const cell = next
+      out.push(node({ p: row, tag: "td", w: 700, h: 40, y: r * 40 }))
+      out.push(node({ p: cell, tag: "button", name: `Row ${r}`, w: 200, h: 30, y: r * 40 }))
+    }
+    return out
+  })
+
+  const { text } = renderMap(nodes)
+  assert.doesNotMatch(text, /table \(0 rows\)/, "the label stated zero over 25 rows")
+  assert.match(text, /table \(25 rows\)/)
+})
+
+test("a table whose rows cannot be counted states no number rather than a wrong one", () => {
+  const nodes = tree(() => [
+    node({ w: 1000, h: 400 }),
+    node({ p: 0, tag: "table", w: 900, h: 300 }),
+    node({ p: 1, tag: "button", name: "Add the first row", w: 200, h: 40 }),
+  ])
+
+  const { text } = renderMap(nodes)
+  assert.match(text, /- table \[/, "expected a bare `table` label")
+  assert.doesNotMatch(text, /0 rows/)
+})

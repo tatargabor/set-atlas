@@ -17,7 +17,8 @@ import path from "node:path"
 import { regionTree, subtree, controlsIn, isScroller, childrenOf } from "./lib/regions.mjs"
 
 const CORPUS = path.join(import.meta.dirname, "corpus")
-const SCREENS = ["rendelesek", "ajanlatok-new", "index", "cikktorzs-id", "penzugy", "beallitasok"]
+// Whatever the recorder actually captured — no app's route names live in here.
+const SCREENS = fs.readdirSync(CORPUS).filter((d) => fs.existsSync(path.join(CORPUS, d, "nodes.json"))).sort()
 
 const load = (slug) => ({
   nodes: JSON.parse(fs.readFileSync(path.join(CORPUS, slug, "nodes.json"), "utf8")),

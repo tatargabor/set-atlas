@@ -21,7 +21,11 @@ import path from "node:path"
 import { createRequire } from "node:module"
 import { pathToFileURL } from "node:url"
 
-const CONSUMER = "~/code/consumer-a"
+// The consumer is a PARAMETER, never a constant. set-atlas is a public package;
+// the app it happens to be measured against belongs in that app's own notes.
+//   ATLAS_CONSUMER=/path/to/app node research/capture-corpus.mjs --all
+const CONSUMER = process.env.ATLAS_CONSUMER
+if (!CONSUMER) throw new Error("Set ATLAS_CONSUMER to the consumer app's root (it must have an atlas.config.mjs).")
 const OUT = path.join(import.meta.dirname, "corpus")
 
 // ⚠ Six archetypes were enough to CHOOSE a format; they are not enough to tune
@@ -30,15 +34,12 @@ const OUT = path.join(import.meta.dirname, "corpus")
 // every route the consumer's own atlas config lists.
 const ALL = process.argv.includes("--all")
 
-/** Six layout archetypes, not six random screens — the spread is the point. */
-const SCREENS = [
-  { slug: "rendelesek", url: "/rendelesek", title: "Rendelések lista", archetype: "3-hasábos master-detail + jobb panel" },
-  { slug: "ajanlatok-new", url: "/ajanlatok/new", title: "Új ajánlat", archetype: "egyszerű űrlap, adat-dömpinggel" },
-  { slug: "index", url: "/", title: "Irányítópult", archetype: "kártyarács / dashboard" },
-  { slug: "cikktorzs-id", url: "/cikktorzs/7c790911-b6ae-45a0-8bd2-62ad573eb63a", title: "Termék részletei", archetype: "detail + fülek" },
-  { slug: "penzugy", url: "/penzugy", title: "Pénzügy", archetype: "a 99%-os tömörítési kilógó" },
-  { slug: "beallitasok", url: "/beallitasok", title: "Beállítások", archetype: "szekcionált beállítás-lap" },
-]
+/**
+ * A subset worth recording when you do not want all of them — layout archetypes,
+ * not favourite pages. Point ATLAS_SCREENS at a JSON file of
+ * `[{slug, url, title, archetype}]`; without it, `--all` is the way in.
+ */
+const SCREENS = process.env.ATLAS_SCREENS ? JSON.parse(fs.readFileSync(process.env.ATLAS_SCREENS, "utf8")) : []
 
 /**
  * Runs in the page. Walks the render tree and records what a screenshot shows

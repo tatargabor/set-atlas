@@ -95,8 +95,18 @@ function flowFor(node, childCount) {
 function roleFor(nodes, tree, owned) {
   const node = tree.node
   if (tree.repeat) return `repeated item ×${tree.repeat}`
-  const rows = owned.filter((n) => n.tag === "tr").length
-  if (node.tag === "table" || rows > 3) return `table (${rows} rows)`
+  const ownRows = owned.filter((n) => n.tag === "tr").length
+  const isTable = node.tag === "table" || node.role === "table" || node.role === "grid"
+  // A table's rows usually become repeated child regions, which puts them OUTSIDE
+  // what the region directly owns — so counting only `owned` reported zero over a
+  // full table. Fall back to the repeated run below it, which is measured to be
+  // exact (257, 25, 25 and 6 rows on four real screens). Restricted to elements
+  // that are actually tables: any container with four repeated children would
+  // otherwise start calling itself one.
+  const rows = ownRows || (isTable ? repeatedBelow(tree) : 0)
+  // No number beats a wrong number. A stated `0 rows` cannot be told apart from a
+  // genuinely empty table, and it is the field a reader is most likely to trust.
+  if (isTable || rows > 3) return rows ? `table (${rows} rows)` : "table"
   if (owned.some((n) => n.role === "tablist")) return "tab bar + panel"
   if (node.tag === "nav" || owned.filter((n) => n.tag === "a").length >= 5) return "navigation"
   if (owned.filter((n) => n.tag === "input" || n.tag === "select" || n.tag === "textarea").length >= 3) return "form"
@@ -109,6 +119,13 @@ function roleFor(nodes, tree, owned) {
 }
 
 const isControl = (n) => CONTROL_TAGS.has(n.tag) || CONTROL_ROLES.has(n.role)
+
+/** The largest repeated run anywhere below this region — a table's row count. */
+function repeatedBelow(tree) {
+  let best = 0
+  for (const child of tree.children) best = Math.max(best, child.repeat ?? 0, repeatedBelow(child))
+  return best
+}
 
 /**
  * The region's own title, if it has one.

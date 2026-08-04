@@ -9,7 +9,7 @@ import { VARIANTS, estimateTokens } from "./lib/variants.mjs"
 
 const CORPUS = path.join(import.meta.dirname, "corpus")
 const OUT = path.join(import.meta.dirname, "variants")
-const SCREENS = ["rendelesek", "ajanlatok-new", "index", "cikktorzs-id", "penzugy", "beallitasok"]
+const SCREENS = fs.readdirSync(CORPUS).filter((d) => fs.existsSync(path.join(CORPUS, d, "nodes.json"))).sort()
 
 const load = (slug) => ({
   nodes: JSON.parse(fs.readFileSync(path.join(CORPUS, slug, "nodes.json"), "utf8")),
