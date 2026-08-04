@@ -319,3 +319,28 @@ test("REGRESSION: a table's rows are the SUM of its repeated runs, not the large
   const { text } = renderMap(nodes)
   assert.match(text, /table \(58 rows\)/, "expected 11 + 44 + 3 rows, not the largest run alone")
 })
+
+test("REGRESSION: controls inside a repeated row are records, not actions", () => {
+  // Measured 2026-08-04 on the first real ACTIONS.md: 320 "actions", of which 30 had no
+  // letter in them at all (`10`, `11`, `.`) and 16 were whole paragraphs. Every one came
+  // from the rows of one table — a link on a table row points at THAT RECORD, and listing
+  // it as an offered action is how a cross-screen index turns into noise nobody greps.
+  const nodes = tree(() => {
+    const out = [
+      node({ w: 1200, h: 900 }),
+      node({ p: 0, tag: "button", name: "Új bejelentés", w: 150, h: 40 }), // a real action
+      node({ p: 0, tag: "table", w: 1100, h: 800, y: 50 }),
+    ]
+    for (let r = 0; r < 8; r++) {
+      const row = next
+      out.push(node({ p: 2, tag: "tr", w: 1100, h: 40, y: 50 + r * 40 }))
+      out.push(node({ p: row, tag: "a", name: `${r + 10}`, w: 60, h: 30, y: 50 + r * 40 }))
+    }
+    return out
+  })
+
+  const { controlList } = renderMap(nodes)
+  const names = controlList.map(c => c.name)
+  assert.ok(names.includes("Új bejelentés"), "a real action must survive")
+  assert.deepEqual(names.filter(n => /^\d+$/.test(n)), [], `row links leaked in: ${names}`)
+})

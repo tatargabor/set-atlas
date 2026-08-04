@@ -41,16 +41,24 @@ const MIN_DATA_NAME_LENGTH = 25
  * the DOM, not from the aria snapshot, and would otherwise reintroduce the exact
  * leak this rule exists to stop — one redaction rule, two renderers.
  */
-export function isRecordName(name) {
+export function isRecordName(name, dataPatterns = []) {
   if (!name) return false
   if (EMAIL_LIKE.test(name)) return true
+  // The consumer's own patterns run ALONGSIDE the built-ins and ignore the length
+  // gate. Measured 2026-08-04: `"FIKTÍVFA Kft. lenyitása"` — a record name wrapped
+  // in an action — is 23 characters and holds no date, amount or id, so every
+  // built-in rule let it through; 17 real company names sat in the atlas for a day.
+  // No built-in CAN catch it: "a word that marks a company" is language-specific,
+  // and baking one language's forms into a general tool fails silently on the next
+  // app, in the direction that leaks.
+  for (const p of dataPatterns) if (p.test(name)) return true
   return name.length >= MIN_DATA_NAME_LENGTH && DATA_LIKE.test(name)
 }
 
 export const RECORD_PLACEHOLDER = "‹record›"
 
-function anonymizeName(text) {
-  return text.replace(/"([^"]*)"/g, (whole, name) => (isRecordName(name) ? `"${RECORD_PLACEHOLDER}"` : whole))
+function anonymizeName(text, dataPatterns = []) {
+  return text.replace(/"([^"]*)"/g, (whole, name) => (isRecordName(name, dataPatterns) ? `"${RECORD_PLACEHOLDER}"` : whole))
 }
 
 function parseLines(yamlText) {
@@ -65,7 +73,7 @@ function parseLines(yamlText) {
  * @param {string} yamlText  raw output of `page.ariaSnapshot()`
  * @returns {{ text: string, droppedDataLines: number }}
  */
-export function compress(yamlText) {
+export function compress(yamlText, { dataPatterns = [] } = {}) {
   const lines = parseLines(yamlText)
   const kept = []
   let i = 0
@@ -114,9 +122,9 @@ export function compress(yamlText) {
   // the very thing the map exists for. Guarded by test/compress.test.mjs.
   const merged = []
   for (let j = 0; j < kept.length; j++) {
-    const key = anonymizeName(kept[j].content)
+    const key = anonymizeName(kept[j].content, dataPatterns)
     let count = 1
-    while (j + count < kept.length && kept[j + count].indent === kept[j].indent && anonymizeName(kept[j + count].content) === key) {
+    while (j + count < kept.length && kept[j + count].indent === kept[j].indent && anonymizeName(kept[j + count].content, dataPatterns) === key) {
       count++
     }
     merged.push(" ".repeat(kept[j].indent) + "- " + key + (count > 1 ? `   (× ${count})` : ""))

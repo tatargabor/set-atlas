@@ -2,7 +2,7 @@
 // Run:  node --test
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { compress } from "../src/compress.mjs"
+import { compress, isRecordName } from "../src/compress.mjs"
 
 test("REGRESSION: distinct menu items must NOT collapse into one", () => {
   // Measured on a real ERP surface, 2026-08-04: the first version normalized
@@ -124,4 +124,26 @@ test("a name carrying an email address is a record, not an interface label", () 
   // The search box is interface and must survive — this is a redaction rule,
   // not a "drop anything long" rule.
   assert.match(text, /Search by name, email or tax number/)
+})
+
+test("REGRESSION: a consumer's own data patterns redact what the built-in rules cannot", () => {
+  // Measured 2026-08-04, and it had been in the atlas unnoticed for a day: an accessible
+  // label that wraps a record name in an action — `"FIKTÍVFA Kft. lenyitása"` — is 23
+  // characters, under the 25-character length gate, and holds no date, amount or id. So
+  // it passed through: 17 real company names across four screen pages. The cross-section
+  // file did not cause this, it made it visible.
+  //
+  // No built-in rule can catch it. "A word that marks a company" is language-specific,
+  // and hard-coding Hungarian company forms into a general tool is the same mistake as
+  // hard-coding `Ft` — it would fail silently in the wrong direction on the next app.
+  // So the consumer declares its own patterns, and they run ALONGSIDE the built-ins.
+  const patterns = [/\b(Kft|Bt|Zrt|Nyrt)\b\.?/i]
+  assert.equal(isRecordName("FIKTÍVFA Kft. lenyitása", patterns), true)
+  assert.equal(isRecordName("Lorem Ipsum Kft partner megnyitása", patterns), true)
+  // The built-ins keep working, and ordinary interface labels are untouched.
+  assert.equal(isRecordName("jane.doe@example.com", patterns), true)
+  assert.equal(isRecordName("Szűrők törlése", patterns), false)
+  assert.equal(isRecordName("Előnézet frissítése", patterns), false)
+  // Without the patterns the leak reproduces — this is what shipped.
+  assert.equal(isRecordName("FIKTÍVFA Kft. lenyitása"), false)
 })

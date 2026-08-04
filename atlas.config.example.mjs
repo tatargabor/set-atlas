@@ -21,6 +21,21 @@ export default {
     })
   },
 
+  // Extra patterns that mark a name as RECORD DATA, redacted to `‹record›`.
+  //
+  // These run alongside the built-in rules (email, date, amount, record id) and
+  // ignore their length gate. You need them when your app wraps record names in
+  // action labels — measured on a real app: `"ACME Ltd. expand"` is 17 characters
+  // and holds no date, amount or id, so every built-in rule let it through and 17
+  // live company names sat in the generated atlas. What marks a company (or a
+  // person, or a project) is specific to your data and your language, so only you
+  // can declare it.
+  //
+  //   dataPatterns: [/\b(Ltd|Inc|GmbH|Kft|Zrt)\b\.?/i],
+  //
+  // ⚠ Check the output after adding one: too broad a pattern silently erases the
+  // action names you need to design with.
+
   // The screens to record.
   //
   // `url`     — what the browser visits (a real id for dynamic routes)

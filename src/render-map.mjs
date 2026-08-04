@@ -34,13 +34,13 @@ const kindOf = (n) => {
  * customer names — the very leak the rule was written for, reintroduced by a
  * second renderer that forgot about it.
  */
-function labelFor(node, place = "") {
+function labelFor(node, place = "", dataPatterns = []) {
   const name = (node.name || "").replace(/\s+/g, " ").trim()
   const kind = kindOf(node)
   const flags = [place, node.dis ? "disabled" : "", node.sel ? "selected" : ""].filter(Boolean)
   const suffix = flags.length ? ` [${flags.join("] [")}]` : ""
   if (!name) return (node.testid ? `${kind} #${node.testid}` : kind) + suffix
-  const shown = isRecordName(name) ? RECORD_PLACEHOLDER : name.slice(0, 60)
+  const shown = isRecordName(name, dataPatterns) ? RECORD_PLACEHOLDER : name.slice(0, 60)
   return `${kind} "${shown}"${suffix}`
 }
 
@@ -150,11 +150,11 @@ function rowsBelow(tree) {
  * on exactly the words a designer needs to say where something goes. Censused:
  * 74 of 590 regions (12%) carry a heading that was going in the bin.
  */
-function titleFor(owned) {
+function titleFor(owned, dataPatterns = []) {
   const heading = owned.filter((n) => /^h[1-6]$/.test(n.tag) && n.name).sort((a, b) => a.y - b.y || a.tag.localeCompare(b.tag))[0]
   if (!heading) return ""
   const text = heading.name.replace(/\s+/g, " ").trim()
-  return isRecordName(text) ? RECORD_PLACEHOLDER : text.slice(0, 60)
+  return isRecordName(text, dataPatterns) ? RECORD_PLACEHOLDER : text.slice(0, 60)
 }
 
 /** Controls this region owns — not the ones its child regions own. */
@@ -193,16 +193,20 @@ function collapse(lines) {
  * @param {Array} nodes  the recorded element tree (see capture.mjs extractNodes)
  * @returns {{ text: string, regions: number, controls: number }}
  */
-export function renderMap(nodes, { visual = true } = {}) {
+export function renderMap(nodes, { visual = true, dataPatterns = [] } = {}) {
   if (!nodes?.length) return { text: "", regions: 0, controls: 0 }
 
   const tree = regionTree(nodes)
   const lines = []
+  const controlList = []
   let regions = 0
   let controls = 0
 
-  const walk = (t, depth) => {
+  const walk = (t, depth, inRepeat = false) => {
     regions++
+    // Once inside a repeated run, everything below it belongs to a RECORD: a link on a
+    // table row points at that row's record, not at a function the screen offers.
+    const repeated = inRepeat || !!t.repeat
     const pad = "  ".repeat(depth)
     const node = t.node
     const owned = ownNodes(nodes, t)
@@ -219,7 +223,7 @@ export function renderMap(nodes, { visual = true } = {}) {
     if (t.depthCapped) notes.push("⚠ nesting below this level not mapped")
 
     const own = ownControls(nodes, t)
-    const title = titleFor(owned)
+    const title = titleFor(owned, dataPatterns)
 
     // ⚠ A region with no controls, no title, no children and nothing to warn
     // about says only "a box exists here". Censused: 25 of 590 regions were
@@ -228,7 +232,7 @@ export function renderMap(nodes, { visual = true } = {}) {
     const worthPrinting = own.length || title || t.children.length || notes.length
     if (!worthPrinting) {
       regions--
-      for (const child of t.children) walk(child, depth)
+      for (const child of t.children) walk(child, depth, repeated)
       return
     }
 
@@ -238,14 +242,23 @@ export function renderMap(nodes, { visual = true } = {}) {
         `${notes.length ? " — " + notes.join(" · ") : ""}`
     )
     controls += own.length
+    // The same controls the page prints, kept as data for the cross-screen files.
+    // Redacted names only: a record name is not an interface label anywhere.
+    if (!repeated)
+      for (const c of own) {
+        const name = (c.name || "").replace(/\s+/g, " ").trim()
+        // A name with no letter in it is a row number or a bullet, never an action.
+        if (name && /\p{L}/u.test(name) && !isRecordName(name, dataPatterns))
+          controlList.push({ kind: kindOf(c), name: name.slice(0, 60), href: c.href || "" })
+      }
     const place = visual ? placements(node, own) : new Map()
-    for (const line of collapse(own.map((c) => `${pad}  - ${labelFor(c, place.get(c.i) ?? "")}`))) lines.push(line)
+    for (const line of collapse(own.map((c) => `${pad}  - ${labelFor(c, place.get(c.i) ?? "", dataPatterns)}`))) lines.push(line)
 
-    for (const child of t.children) walk(child, depth + 1)
+    for (const child of t.children) walk(child, depth + 1, repeated)
   }
 
   walk(tree, 0)
-  return { text: lines.join("\n"), regions, controls }
+  return { text: lines.join("\n"), regions, controls, controlList }
 }
 
 /**
@@ -287,6 +300,11 @@ export function extractNodes() {
       role: el.getAttribute("role") || "",
       testid: el.getAttribute("data-testid") || "",
       name: accName(el),
+      // Where a link GOES. It is deliberately not printed on the screen page —
+      // it would cost tokens on every one of them to answer a question nobody
+      // asks about a single screen. It answers a cross-screen one: which screens
+      // reach which, and which screen nothing reaches.
+      href: el.tagName === "A" ? (el.getAttribute("href") || "") : "",
       // Whole pixels — sub-pixel noise would make every diff a false positive.
       x: Math.round(r.x),
       y: Math.round(r.y),

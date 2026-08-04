@@ -9,6 +9,7 @@ import path from "node:path"
 import { compress, estimateTokens } from "./compress.mjs"
 import { renderMap, extractNodes } from "./render-map.mjs"
 import { buildPointers } from "./pointers.mjs"
+import { buildActions, buildNavigation } from "./crosscut.mjs"
 
 const slugForPattern = (pattern) =>
   pattern.replace(/^\//, "").replace(/[/[\]#]/g, "-").replace(/-+/g, "-").replace(/-$/, "") || "index"
@@ -41,7 +42,7 @@ function frontmatter(fields) {
  *                         so set-atlas never pins a browser version on you.
  */
 export async function capture(config, { chromium, onProgress = () => {} }) {
-  const { baseUrl, routes, root, outDir, viewport = { width: 1600, height: 1000 }, settleMs = 2500 } = config
+  const { baseUrl, routes, root, outDir, viewport = { width: 1600, height: 1000 }, settleMs = 2500, dataPatterns = [] } = config
 
   const browser = await chromium.launch({ headless: true })
   const context = await browser.newContext({ viewport })
@@ -85,14 +86,15 @@ export async function capture(config, { chromium, onProgress = () => {} }) {
       // If the page will not give up its boxes, fall back to the flat aria map
       // rather than failing the screen: a worse map beats a missing one, and the
       // frontmatter says which was used so nobody has to guess.
-      const flat = compress(raw)
+      const flat = compress(raw, { dataPatterns })
       let map
       let mapKind = "regions"
       let regions = 0
+      let rendered
       try {
         const dom = await page.evaluate(extractNodes)
         if (dom.truncated) throw new Error(`element tree hit the 30,000-node cap`)
-        const rendered = renderMap(dom.nodes)
+        rendered = renderMap(dom.nodes, { dataPatterns })
         if (!rendered.text) throw new Error("no regions could be reconstructed")
         map = rendered.text
         regions = rendered.regions
@@ -110,6 +112,13 @@ export async function capture(config, { chromium, onProgress = () => {} }) {
         map,
         mapKind,
         regions,
+        controlList: rendered?.controlList ?? [],
+        // What the recorder DID. A page reached by navigation alone shows only what
+        // exists before any interaction — measured twice on 2026-08-04: the consumer
+        // read a screen as "this region does not exist here" when the truth was "no
+        // row was selected". Same rule as `⚠ N more controls outside this frame`,
+        // on the time axis instead of the space axis.
+        steps: (route.actions ?? []).map(s => (s.click ? `clicked ${s.click}` : s.press ? `pressed ${s.press}` : null)).filter(Boolean),
         pointers: buildPointers(route, config),
         stats: { rawTokens: estimateTokens(raw), mapTokens: estimateTokens(map), droppedDataLines: flat.droppedDataLines },
       })
@@ -177,6 +186,14 @@ export function writeScreens(screens, { root, outDir }) {
       `# ${screen.title ?? screen.pattern}`,
       "",
       "```yaml",
+      // ⚠ Says what the RECORDING was, never what the screen contains. A map made by
+      // navigation alone holds no selection-dependent region — no detail pane, no
+      // action bar, no search result — and two such maps compared side by side show a
+      // structural difference that is not one. Measured 2026-08-04: the consumer read
+      // exactly that difference as a finding, twice.
+      screen.steps?.length
+        ? `# ⚠ capture: after interaction — ${screen.steps.join(", ")}`
+        : "# ⚠ capture: navigation only — regions that appear after interaction (detail panes, action bars, search results, menus) are not in this map",
       screen.map,
       "```",
       "",
@@ -202,6 +219,12 @@ export function writeScreens(screens, { root, outDir }) {
     "",
     "> GENERATED — do not edit. Regenerate with `npx set-atlas`.",
     "",
+    // Named before the screen list on purpose: the two questions these answer are the
+    // ones a reader would otherwise try to answer by opening every screen page in turn
+    // — which is the reading nobody actually does.
+    "**Across all screens:** [ACTIONS.md](./ACTIONS.md) — is this action offered somewhere already? ·",
+    "[NAVIGATION.md](./NAVIGATION.md) — what reaches this screen, and what nothing reaches.",
+    "",
     "| screen | source | tokens |",
     "|---|---|---|",
     // A variant row shows the URL that reaches it — two rows both reading
@@ -216,4 +239,9 @@ export function writeScreens(screens, { root, outDir }) {
     ...(failed.length ? ["## Could not be recorded", "", ...failed.map((s) => `- \`${s.url}\` — ${s.error}`), ""] : []),
   ].join("\n")
   fs.writeFileSync(path.join(dir, "INDEX.md"), index)
+
+  // Same recording, no extra capture — the questions that point across screens
+  // rather than down into one.
+  fs.writeFileSync(path.join(dir, "ACTIONS.md"), buildActions(screens))
+  fs.writeFileSync(path.join(dir, "NAVIGATION.md"), buildNavigation(screens))
 }
