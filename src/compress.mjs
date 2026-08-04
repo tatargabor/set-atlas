@@ -21,13 +21,36 @@ const STRUCTURAL_ROLES =
  */
 const DATA_LIKE = /\d{2}[-.:]\d{2}|\d[\d.,\s]{3,}\s*(Ft|EUR|USD|GBP|€|\$|£)|\b[A-Z]{1,3}-\d{3,}\b/
 
+/**
+ * An email address in an accessible name is a person, never a control.
+ *
+ * ⚠ Measured 2026-08-04: the consumer-a picker page shipped 340 lines of real
+ * customer names and addresses into `docs/atlas/ajanlatok-new.md` — 5,640
+ * tokens, a fifth of the whole atlas — because DATA_LIKE only knew dates,
+ * amounts and record ids. It is checked BEFORE the length gate: ". foo@bar.hu"
+ * is nineteen characters and still a customer.
+ */
+const EMAIL_LIKE = /[\w.+-]+@[\w-]+\.\w{2,}/
+
 const MIN_DATA_NAME_LENGTH = 25
 
+/**
+ * Is this accessible name a record rather than a piece of interface?
+ *
+ * Exported because the region map (src/render-map.mjs) writes control names from
+ * the DOM, not from the aria snapshot, and would otherwise reintroduce the exact
+ * leak this rule exists to stop — one redaction rule, two renderers.
+ */
+export function isRecordName(name) {
+  if (!name) return false
+  if (EMAIL_LIKE.test(name)) return true
+  return name.length >= MIN_DATA_NAME_LENGTH && DATA_LIKE.test(name)
+}
+
+export const RECORD_PLACEHOLDER = "‹record›"
+
 function anonymizeName(text) {
-  return text.replace(
-    new RegExp(`"([^"]{${MIN_DATA_NAME_LENGTH},})"`, "g"),
-    (whole, name) => (DATA_LIKE.test(name) ? '"‹record›"' : whole)
-  )
+  return text.replace(/"([^"]*)"/g, (whole, name) => (isRecordName(name) ? `"${RECORD_PLACEHOLDER}"` : whole))
 }
 
 function parseLines(yamlText) {

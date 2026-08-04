@@ -55,7 +55,13 @@ if (!chromium) {
 const checkOnly = args.includes("--check")
 const screens = await capture(
   { ...config, outDir: checkOnly ? null : config.outDir },
-  { chromium, onProgress: ({ ok, route, error }) => console.log(ok ? `✓ ${route}` : `✗ ${route}: ${error}`) }
+  {
+    chromium,
+    // A degraded screen is neither a pass nor a failure, and printing it as
+    // either hides it — `✓` would claim a layout map that isn't there.
+    onProgress: ({ ok, warn, route, error }) =>
+      console.log(warn ? `⚠ ${route}: ${error}` : ok ? `✓ ${route}` : `✗ ${route}: ${error}`),
+  }
 )
 
 const ok = screens.filter((s) => !s.error)

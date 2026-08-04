@@ -4,3 +4,16 @@ dist/
 .DS_Store
 atlas.config.mjs
 .claude/
+# Everything the research harness GENERATES comes from a production-copy database
+# — real names, real email addresses, real amounts. Scripts are versionable; their
+# output never is. Verified 2026-08-04: variants/ and prompts/ held 300+ lines of
+# live customer data while only corpus/ and runs/ were ignored, so a `git add -A`
+# would have committed it to a public MIT repo.
+research/corpus/
+research/runs/
+research/variants/
+research/prompts/
+research/answers/
+research/*.json
+# Session scratch (dictation capture, copilot state) — never versioned.
+.set/

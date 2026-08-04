@@ -96,3 +96,32 @@ test("state markers ([selected], [disabled]) are preserved", () => {
 test("empty input does not throw", () => {
   assert.equal(compress("").text, "")
 })
+
+test("a name carrying an email address is a record, not an interface label", () => {
+  // Measured 2026-08-04 on a 33-screen ERP: one partner-picker page was 5,640
+  // tokens — 20% of the whole atlas — and 340 of its lines were real customer
+  // names and email addresses. DATA_LIKE only knew about dates, amounts and
+  // record ids, so a name like "Jane Doe jane.doe@example.com" passed straight
+  // through: live personal data in a file the project tells you to paste into
+  // planning prompts, and the screen's actual shape (a title, a search box, a
+  // scrolling list, two buttons) buried under it.
+  //
+  // ⚠ The fixture is synthetic ON PURPOSE. The first version of this test used
+  // three of the real names it was written to redact — in a public MIT repo. The
+  // rule was already written down; it just wasn't applied to our own material.
+  const input = `
+- textbox "Search by name, email or tax number..."
+- button "Jane Doe jane.doe@example.com"
+- button "Acme Ltd. invoices@acme.example"
+- button ". x@y.hu"
+`.trim()
+
+  const { text } = compress(input)
+  assert.doesNotMatch(text, /jane\.doe|acme|x@y/, "customer data survived into the map")
+  // The short one matters most: it is under the 25-character length gate, so
+  // only the email itself can give it away.
+  assert.match(text, /‹record›/)
+  // The search box is interface and must survive — this is a redaction rule,
+  // not a "drop anything long" rule.
+  assert.match(text, /Search by name, email or tax number/)
+})

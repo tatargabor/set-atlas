@@ -17,14 +17,33 @@ buttons, the tabs, the filters, the table columns, and where every link leads. P
 That's the whole surface of a mid-size ERP. At design time you need three or four screens of it —
 about 2k tokens, small enough to sit next to a proposal.
 
-## Why the accessibility tree
+## Why regions, and not just the accessibility tree
 
-The map comes from Playwright's `page.ariaSnapshot()` — the accessibility tree as YAML. It is the
-same layer screen readers and browsing agents already consume, which makes it:
+Control names and roles come from the layer screen readers and browsing agents already consume, so
+they are stable against CSS churn and honest about what is reachable. But the accessibility tree has
+**no role for a column** — and rightly so: a column means nothing to a screen reader. It means
+everything to whoever is deciding where a new button goes.
 
-- **stable** — it survives CSS churn; it changes when the *meaning* of the UI changes,
-- **honest** — if a control isn't in the tree, agents can't see it either,
-- **cheap** — text, not pixels.
+So the layout is recovered from the rendered boxes and printed as a region tree.
+
+Measured blind on six layout archetypes — six formats, 46 questions with answers computed from
+geometry rather than judged ([the study](docs/kutatas/2026-08-04-vizualis-megertes.md), in Hungarian):
+
+| format | correct | tokens |
+|---|---|---|
+| **region tree (what this ships)** | **44/46** | **4,480** |
+| a screenshot of the same screen | 43/46 | ~9,600 image tokens |
+| flat accessibility dump (what this used to ship) | 40/46 | 9,081 |
+
+Two results shaped the format:
+
+- **Coordinates are noise.** An arm that printed `[x,y w×h]` on every element scored *worse*
+  (42/46) and cost 51% more. Containment and size are the signal.
+- **Scroll depth is the fact nothing else carries.** One screen held 18,866px of list in a 318px
+  frame; the accessibility tree cannot say it and the screenshot cannot show it.
+
+If a page won't give up its geometry, the map falls back to the flat accessibility dump and says so
+in `map_kind:` — a worse map beats a missing one, as long as nobody has to guess which they got.
 
 ## Why generated, not hand-written
 
@@ -51,25 +70,40 @@ actions:
   - actions.ts::getOrderDetail
   - actions.ts::addOrderItem
 manual: docs/manual/chapters/02-orders.md
-tokens: 791
+map_kind: regions
+regions: 12
+tokens: 604
 ---
 ```
 
 ````
-- main:
-  - heading "Orders" [level=1]
-  - tablist:
-    - tab "Details" [selected]
-    - tab "Items"
-  - button "New quote"
-  - searchbox "Search"
-  - table:
-    - columns: Date · Amount · Partner · Status
-- navigation "Main navigation":
-  - link "Dashboard":
-  - link "Orders":
-  - link "Products":
+- panel [1600×1000 row]
+  - navigation [63×895 column]
+    - link "Dashboard"
+    - link "Orders"
+    - link "Products"
+  - panel [1536×1000 column]
+    - toolbar strip [1536×56 row]
+      - searchbox "Search"
+      - button "New quote" [right]
+    - panel [1536×944 row]
+      - scrollable list "Incoming orders" [319×761] — ⇅ 24914px of content in a 761px frame
+        - repeated item ×257 [319×88]
+      - tab bar + panel [725×998 column]
+        - tab "Details" [selected]
+        - tab "Items"
+        - button "Approve" [right]
 ````
+
+Three panes side by side, the sizes that say which is the list and which is the detail, a list 33
+screens deep behind a 761px window, and which end of a bar each action sits on. A flat tree can
+express none of it; a screenshot shows neither the scroll depth nor the exact count.
+
+`[right]` / `[centre]` mark position **within** a region — left is the default and carries no
+marker, so a plain column costs nothing. Adding this layer measured 48/49 against 46/49 without it,
+for 13% more tokens: the gain landed on exactly the question every format had been failing
+(*"which quadrant is this search box in?"* — it is at the right end of a full-width bar, and
+reading order never said so).
 
 ## What gets thrown away — and why
 

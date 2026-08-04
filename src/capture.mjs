@@ -7,10 +7,19 @@
 import fs from "node:fs"
 import path from "node:path"
 import { compress, estimateTokens } from "./compress.mjs"
+import { renderMap, extractNodes } from "./render-map.mjs"
 import { buildPointers } from "./pointers.mjs"
 
-const slugFor = (pattern) =>
+const slugForPattern = (pattern) =>
   pattern.replace(/^\//, "").replace(/[/[\]#]/g, "-").replace(/-+/g, "-").replace(/-$/, "") || "index"
+
+/**
+ * A route may declare a `state:` — a named variant of the same pattern, reached
+ * by a query parameter or a setup step. To the framework these are one route; to
+ * someone designing on the screen they are two, and they can differ completely.
+ */
+const slugFor = (screen) =>
+  screen.state ? `${slugForPattern(screen.pattern)}--${screen.state}` : slugForPattern(screen.pattern)
 
 function frontmatter(fields) {
   const lines = []
@@ -69,19 +78,44 @@ export async function capture(config, { chromium, onProgress = () => {} }) {
           throw new Error(`ariaSnapshot did not settle after a retry — ${snapshotError.message}`)
         })
       }
-      const { text, droppedDataLines } = compress(raw)
+      // The region map needs geometry, which `ariaSnapshot` does not carry — a
+      // column has no ARIA role, because it means nothing to a screen reader and
+      // everything to someone designing on the screen.
+      //
+      // If the page will not give up its boxes, fall back to the flat aria map
+      // rather than failing the screen: a worse map beats a missing one, and the
+      // frontmatter says which was used so nobody has to guess.
+      const flat = compress(raw)
+      let map
+      let mapKind = "regions"
+      let regions = 0
+      try {
+        const dom = await page.evaluate(extractNodes)
+        if (dom.truncated) throw new Error(`element tree hit the 30,000-node cap`)
+        const rendered = renderMap(dom.nodes)
+        if (!rendered.text) throw new Error("no regions could be reconstructed")
+        map = rendered.text
+        regions = rendered.regions
+      } catch (geometryError) {
+        map = flat.text
+        mapKind = "aria-flat"
+        onProgress({ warn: true, route: route.url, error: `geometry unavailable, using the flat aria map — ${geometryError.message}` })
+      }
 
       screens.push({
         url: route.url,
         pattern: route.pattern ?? route.url,
+        state: route.state,
         title: route.title,
-        map: text,
+        map,
+        mapKind,
+        regions,
         pointers: buildPointers(route, config),
-        stats: { rawTokens: estimateTokens(raw), mapTokens: estimateTokens(text), droppedDataLines },
+        stats: { rawTokens: estimateTokens(raw), mapTokens: estimateTokens(map), droppedDataLines: flat.droppedDataLines },
       })
       onProgress({ ok: true, route: route.url })
     } catch (error) {
-      screens.push({ url: route.url, pattern: route.pattern ?? route.url, error: error.message })
+      screens.push({ url: route.url, pattern: route.pattern ?? route.url, state: route.state, error: error.message })
       onProgress({ ok: false, route: route.url, error: error.message })
       // Leave a clean slate for the next route, whatever state this one left behind
       // (open dialog, pending navigation) — otherwise one failure cascades.
@@ -98,12 +132,47 @@ export async function capture(config, { chromium, onProgress = () => {} }) {
 /** One markdown page per screen, so the diff stays readable. */
 export function writeScreens(screens, { root, outDir }) {
   const dir = path.join(root, outDir)
+
+  // Refuse BEFORE writing anything. The filename comes from the pattern, so two
+  // routes sharing one would overwrite each other and INDEX.md would point both
+  // rows at the surviving page — while the run still reports every screen as
+  // recorded. Reported 2026-08-04 by the atlas's first consumer: the obvious way
+  // to record a `?param=` view is to reuse the pattern, and doing so would have
+  // deleted a page that was already in the atlas. A half-written directory is
+  // worse than a refusal, because `--check` would then report drift that the UI
+  // never had.
+  const seen = new Map()
+  for (const screen of screens) {
+    if (screen.error) continue
+    const slug = slugFor(screen)
+    if (seen.has(slug))
+      throw new Error(
+        `Two routes would both be written to ${slug}.md — \`${seen.get(slug)}\` and \`${screen.url}\`. ` +
+          `Give one of them a distinct \`state:\` in the config.`
+      )
+    seen.set(slug, screen.url)
+  }
+
   fs.mkdirSync(dir, { recursive: true })
 
   for (const screen of screens) {
     if (screen.error) continue
     const body = [
-      frontmatter({ route: screen.pattern, title: screen.title, ...screen.pointers, map_tokens: screen.stats.mapTokens }),
+      frontmatter({
+        route: screen.pattern,
+        state: screen.state,
+        // Only a variant carries its URL: for a parameterized route the URL holds
+        // a concrete record id, which is exactly what the map anonymizes away.
+        url: screen.state ? screen.url : null,
+        title: screen.title,
+        ...screen.pointers,
+        // Which renderer produced the block below. A reader who sees
+        // `aria-flat` knows the layout facts (columns, scroll depth) are absent
+        // from THIS page — not that the screen has none.
+        map_kind: screen.mapKind,
+        regions: screen.regions || null,
+        map_tokens: screen.stats.mapTokens,
+      }),
       "",
       `# ${screen.title ?? screen.pattern}`,
       "",
@@ -112,7 +181,7 @@ export function writeScreens(screens, { root, outDir }) {
       "```",
       "",
     ].join("\n")
-    fs.writeFileSync(path.join(dir, `${slugFor(screen.pattern)}.md`), body)
+    fs.writeFileSync(path.join(dir, `${slugFor(screen)}.md`), body)
     // What a reader actually pays for is the WHOLE page, pointers included.
     // Reporting only the compressed map understated the real cost by ~26%
     // (measured 2026-08-04: 23.8k reported vs 30k on disk) — and that number
@@ -135,9 +204,11 @@ export function writeScreens(screens, { root, outDir }) {
     "",
     "| screen | source | tokens |",
     "|---|---|---|",
+    // A variant row shows the URL that reaches it — two rows both reading
+    // "/rendelesek" would tell a reader nothing about which view is which.
     ...ok.map(
       (s) =>
-        `| [${s.pattern}](./${slugFor(s.pattern)}.md) | \`${s.pointers.source ?? "—"}\` | ${s.stats.pageTokens ?? s.stats.mapTokens} |`
+        `| [${s.state ? s.url : s.pattern}](./${slugFor(s)}.md) | \`${s.pointers.source ?? "—"}\` | ${s.stats.pageTokens ?? s.stats.mapTokens} |`
     ),
     "",
     // Failures are listed, never swallowed: a silently missing screen looks
