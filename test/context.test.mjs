@@ -104,3 +104,16 @@ test("a stale page carries its warning INTO the planning context", () => {
   assert.match(out, /This page is STALE/)
   assert.match(out, /ariaSnapshot did not settle/)
 })
+
+test("--files works where there is no change at all", () => {
+  // Reported by the consumer 2026-08-04: most of their fixes are conformance
+  // repair and run deliberately without a proposal, so `--change` has nothing to
+  // read — while that is exactly where the failure class bites, because a bug
+  // report describes what ONE screen shows and the fix belongs to the class.
+  // A file list is always available; a change is not.
+  const dir = atlas({ "orders.md": page("/orders", "source: src/app/orders/page.tsx\n"), "other.md": page("/other") })
+  const out = buildContext({ atlasDir: dir, changeName: "2 changed file(s)", text: "src/app/orders/page.tsx\nsrc/lib/mailer.ts" })
+  assert.match(out, /`\/orders`/)
+  assert.match(out, /it references `src\/app\/orders\/page\.tsx`/)
+  assert.equal(/## `\/other`/.test(out), false, "a page nothing points at stays out")
+})

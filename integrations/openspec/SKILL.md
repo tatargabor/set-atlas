@@ -47,7 +47,8 @@ change did not land — this is the only step here a machine can check on its ow
 
 ## The rule that keeps this honest
 
-**The atlas guides, it does not prove.** It is generated from the rendered UI, so it cannot see
+**The atlas does not replace reading the code.** It helps you understand, plan and orient — it
+does not verify. It is generated from the rendered UI, so it cannot see
 server-side scope — `where` clauses, query filters, permission checks. Measured 2026-08-04: of
 ten findings a review agent produced from the atlas, two had their root cause invisible in it.
 The map pointed; the code proved. Every finding you take from the atlas gets confirmed in the

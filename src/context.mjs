@@ -159,9 +159,21 @@ export function neighbours(edges, chosen, screenCount = 0) {
   return { near: [...out].map(([route, why]) => ({ route, why })), hidden }
 }
 
-export function buildContext({ atlasDir, changeDir, changeName, top = 5 }) {
+/**
+ * @param {object} opts
+ * @param {string} [opts.changeDir]  an OpenSpec change directory, read whole
+ * @param {string} [opts.text]       or the text to match against directly — a list of
+ *                                   changed file paths, say
+ *
+ * ⚠ `text` exists because most fixes never get a change directory. Reported by the
+ * consumer 2026-08-04: the majority of their work is conformance repair, which runs
+ * deliberately without a proposal — and that is exactly where the failure class bites,
+ * because a bug report describes what ONE screen shows while the fix belongs to the
+ * whole class. A file list is always available; a change is not.
+ */
+export function buildContext({ atlasDir, changeDir, changeName, text, top = 5 }) {
   const pages = readAtlas(atlasDir)
-  const changeText = readChange(changeDir)
+  const changeText = text ?? readChange(changeDir)
   const ranked = selectPages(pages, changeText)
   const chosen = ranked.slice(0, top)
   const { near, hidden } = neighbours(readNavigation(atlasDir), chosen, pages.length)
@@ -169,8 +181,9 @@ export function buildContext({ atlasDir, changeDir, changeName, top = 5 }) {
   const out = [
     `# Surface context — \`${changeName}\``,
     "",
-    "> GENERATED. The atlas **guides, it does not prove**: it cannot see server-side scope",
-    "> (`where` clauses, query filters), so anything you find here has to be confirmed in the code.",
+    "> GENERATED. **The atlas does not replace reading the code.** It is a snapshot of the",
+    "> rendered DOM — it cannot see server-side scope, state, or call chains. Use it to",
+    "> understand, plan and orient; confirm every claim in the source.",
     "",
   ]
 

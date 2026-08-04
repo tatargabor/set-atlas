@@ -35,23 +35,35 @@ config.root ??= path.dirname(configPath)
 // must not require one. Handled before Playwright is resolved so that planning
 // works on a machine where the app isn't even installed.
 if (args[0] === "context") {
-  const name = flag("--change")
-  if (typeof name !== "string") {
-    console.error("Usage: npx set-atlas context --change <change-name> [--top 5]")
+  const atlasDir = path.join(config.root, config.outDir)
+  if (!fs.existsSync(atlasDir)) {
+    console.error(`No atlas directory at ${atlasDir}`)
     process.exit(1)
   }
-  const atlasDir = path.join(config.root, config.outDir)
-  const changeDir = path.join(config.root, config.changesDir ?? "openspec/changes", name)
-  for (const [what, dir] of [
-    ["atlas", atlasDir],
-    ["change", changeDir],
-  ]) {
-    if (!fs.existsSync(dir)) {
-      console.error(`No ${what} directory at ${dir}`)
-      process.exit(1)
-    }
-  }
   const top = Number(flag("--top")) || 5
+  const name = flag("--change")
+  // `--files` takes the paths a fix touches, for the work that never gets a change
+  // directory. Reported by a consumer 2026-08-04: most of their repairs run without
+  // a proposal, and that is where the failure class bites hardest — a bug report
+  // describes one screen, the fix belongs to the whole class.
+  //
+  //   node .../cli.mjs context --files $(git diff --name-only)
+  const fileArgs = args.indexOf("--files") === -1 ? null : args.slice(args.indexOf("--files") + 1).filter((a) => !a.startsWith("--"))
+
+  if (fileArgs?.length) {
+    console.log(buildContext({ atlasDir, changeName: `${fileArgs.length} changed file(s)`, text: fileArgs.join("\n"), top }))
+    process.exit(0)
+  }
+  if (typeof name !== "string") {
+    console.error("Usage: npx set-atlas context --change <change-name> [--top 5]")
+    console.error("       npx set-atlas context --files <path> [<path>…] [--top 5]")
+    process.exit(1)
+  }
+  const changeDir = path.join(config.root, config.changesDir ?? "openspec/changes", name)
+  if (!fs.existsSync(changeDir)) {
+    console.error(`No change directory at ${changeDir}`)
+    process.exit(1)
+  }
   console.log(buildContext({ atlasDir, changeDir, changeName: name, top }))
   process.exit(0)
 }

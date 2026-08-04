@@ -18,11 +18,18 @@ package. Working notes under `docs/` and conversation with the user: **Hungarian
 1. **Generated, never hand-maintained.** A stale UI description is worse than none,
    because planning silently builds on it. If a field cannot be generated, it does not
    belong in the output.
-2. **The atlas guides, it does not prove.** It cannot see server-side scope (`where`
-   clauses, query filters). Measured 2026-08-04: of ten findings a review agent produced
-   from the atlas, two had their root cause invisible in it — the map pointed, the code
-   proved. Say this in every prompt and doc; a reader who over-trusts it is the failure
-   mode.
+2. **The atlas does not replace reading the code.** Stated by the user, 2026-08-04: *"the
+   atlas cannot replace reviewing the TypeScript and the UI code — it helps with visual
+   understanding, planning and orientation."* It is a snapshot of the rendered DOM, so it
+   cannot see server-side scope (`where` clauses, query filters), state, or call chains.
+   Measured the same day: of ten findings a review agent produced from the atlas, two had
+   their root cause invisible in it — the map pointed, the code proved. And the consumer's
+   `/rendelesek/erdeklodesek` turned out to read a different entity entirely, which only
+   the source and a `count(*)` could say.
+
+   ⚠ The danger is not that the map is wrong; it is that a map *looks like* an overview.
+   A "I checked it" resting on the atlas is exactly as unverified as "the code looks fine".
+   Say this in every prompt and doc; a reader who over-trusts it is the failure mode.
 3. **Every cap and every omission is announced.** `actions_more`, `components_more`,
    failed screens in `INDEX.md`. A silently truncated list is the specific bug this tool
    exists to catch — shipping it would be self-refuting.

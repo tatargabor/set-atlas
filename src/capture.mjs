@@ -88,6 +88,44 @@ function markStale(text, error) {
   ].join("\n")
 }
 
+/**
+ * Runs in the page: resolves once the DOM has stopped changing for `quietMs`,
+ * or when `maxMs` runs out. Returns how long it waited and whether it went quiet.
+ *
+ * ⚠ This replaces "wait a fixed 2500ms and hope". Measured on the consumer
+ * 2026-08-04, nine recordings of ONE page at 2500ms: three came out with 32
+ * regions and six with 35 — a communication panel arrives late, and a third of
+ * the recordings missed it. At 6000ms, nine out of nine agreed. But a bigger
+ * constant is still a guess: it is 3.5 seconds wasted on the 32 screens that
+ * were ready, and still too short for whatever loads slower tomorrow.
+ *
+ * ⚠ And "sample twice, accept when they match" is NOT the fix either, which is
+ * the trap worth writing down: if the content lands at 4s, samples taken at 2.5s
+ * and 3.5s agree perfectly — and both are wrong. Two matching signals are not a
+ * confirmation when they share a blind spot. Watching for the mutation itself
+ * has no such blind spot: late content resets the timer by arriving.
+ */
+function quietDom({ quietMs, maxMs }) {
+  return new Promise((resolve) => {
+    const started = Date.now()
+    let timer
+    const done = (quiet) => {
+      clearTimeout(timer)
+      observer.disconnect()
+      clearTimeout(cap)
+      resolve({ quiet, waitedMs: Date.now() - started })
+    }
+    const arm = () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => done(true), quietMs)
+    }
+    const observer = new MutationObserver(arm)
+    observer.observe(document, { subtree: true, childList: true, attributes: true, characterData: true })
+    const cap = setTimeout(() => done(false), maxMs)
+    arm()
+  })
+}
+
 function frontmatter(fields) {
   const lines = []
   for (const [key, value] of Object.entries(fields)) {
@@ -108,7 +146,21 @@ function frontmatter(fields) {
  *                         so set-atlas never pins a browser version on you.
  */
 export async function capture(config, { chromium, onProgress = () => {} }) {
-  const { baseUrl, routes, root, outDir, viewport = { width: 1600, height: 1000 }, settleMs = 2500, dataPatterns = [] } = config
+  const {
+    baseUrl,
+    routes,
+    root,
+    outDir,
+    viewport = { width: 1600, height: 1000 },
+    settleMs = 2500,
+    // How long the DOM has to hold still before the map is taken, and how long
+    // to keep waiting for that. Measured: the late panel that made one page flap
+    // arrives well inside 6s, so 800ms of stillness with an 8s ceiling covers it
+    // without spending 3.5s on the screens that were ready at 2500ms.
+    quietMs = 800,
+    maxQuietMs = 8000,
+    dataPatterns = [],
+  } = config
 
   const browser = await chromium.launch({ headless: true })
   const context = await browser.newContext({ viewport })
@@ -121,6 +173,14 @@ export async function capture(config, { chromium, onProgress = () => {} }) {
     try {
       await page.goto(`${baseUrl}${route.url}`, { waitUntil: "networkidle", timeout: route.timeout ?? 45000 })
       await page.waitForTimeout(route.settleMs ?? settleMs)
+      // …and then wait for the page to actually stop moving, rather than trusting
+      // that number. A screen that never goes quiet (a poll, a running animation)
+      // is recorded anyway at the cap — and SAYS SO, because a map taken from a
+      // moving page is exactly the one nobody should read as settled.
+      const stillness = await page.evaluate(quietDom, { quietMs: route.quietMs ?? quietMs, maxMs: route.maxQuietMs ?? maxQuietMs })
+      if (!stillness.quiet) {
+        onProgress({ warn: true, route: route.url, error: `never stopped changing — recorded after ${stillness.waitedMs}ms anyway` })
+      }
 
       // Where the browser actually ended up. Compared on PATH only: a framework
       // that appends its own query string to the same page is not a redirect,
@@ -193,6 +253,7 @@ export async function capture(config, { chromium, onProgress = () => {} }) {
         // on the time axis instead of the space axis.
         steps: (route.actions ?? []).map(s => (s.click ? `clicked ${s.click}` : s.press ? `pressed ${s.press}` : null)).filter(Boolean),
         redirectedTo,
+        unsettled: stillness.quiet ? null : stillness.waitedMs,
         pointers: buildPointers({ ...route, redirectedTo }, config),
         stats: { rawTokens: estimateTokens(raw), mapTokens: estimateTokens(map), droppedDataLines: flat.droppedDataLines },
       })
@@ -253,6 +314,9 @@ export function writeScreens(screens, { root, outDir }) {
         // route with its own UI, and a doorway to someone else's. Reported by
         // the consumer 2026-08-04, where `source:` named a four-line stub.
         redirected_to: screen.redirectedTo,
+        // A page that never held still is a map of a moving target. Saying so is
+        // the difference between a reader trusting it and a reader checking it.
+        recorded_while_changing: screen.unsettled ? `${screen.unsettled}ms` : null,
         ...screen.pointers,
         // Which renderer produced the block below. A reader who sees
         // `aria-flat` knows the layout facts (columns, scroll depth) are absent
