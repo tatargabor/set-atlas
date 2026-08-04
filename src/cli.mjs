@@ -114,19 +114,28 @@ const screens = await capture(
 const ok = screens.filter((s) => !s.error)
 const failed = screens.filter((s) => s.error)
 // The whole page is what a reader pays for — map plus pointers, not the map alone.
-const tokens = ok.reduce((a, s) => a + (s.stats.pageTokens ?? s.stats.mapTokens), 0)
 const raw = ok.reduce((a, s) => a + s.stats.rawTokens, 0)
 
-console.log(
-  `\n${ok.length} screens · ~${(tokens / 1000).toFixed(1)}k tokens on disk ` +
-    `(raw aria ~${(raw / 1000).toFixed(1)}k — ${(100 - (tokens / raw) * 100).toFixed(0)}% smaller)`
-)
+// ⚠ Printed AFTER the pages are written, in both modes. `pageTokens` is set by
+// writeScreens, and `--check` writes to a temp directory further down — so
+// reporting here made the same atlas read 23.0k under `--check` and 29.3k under a
+// normal run. The map alone is not what a reader pays for; that is the D9 lesson
+// this line already carries, and the check path was quietly undoing it.
+const reportSize = () => {
+  const tokens = ok.reduce((a, s) => a + (s.stats.pageTokens ?? s.stats.mapTokens), 0)
+  console.log(
+    `\n${ok.length} screens · ~${(tokens / 1000).toFixed(1)}k tokens on disk ` +
+      `(raw aria ~${(raw / 1000).toFixed(1)}k — ${(100 - (tokens / raw) * 100).toFixed(0)}% smaller)`
+  )
+}
+if (!checkOnly) reportSize()
 
 if (checkOnly) {
   // Staleness check: compare the freshly recorded pages against what's on disk.
   // Nothing is written — the caller (a git hook, CI) decides from the exit code.
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "set-atlas-"))
   writeScreens(screens, { root: tmp, outDir: "." })
+  reportSize()
   const dir = path.join(config.root, config.outDir)
   const read = (file) => (fs.existsSync(file) ? withoutProvenance(fs.readFileSync(file, "utf-8")) : null)
   const produced = fs.readdirSync(tmp)
