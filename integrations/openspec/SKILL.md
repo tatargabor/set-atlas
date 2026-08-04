@@ -17,8 +17,12 @@ blind to *where it goes*.
 **1. Get the screens this change concerns — not the whole atlas.**
 
 ```bash
-npx set-atlas context --change <change-name>
+node <path-to>/set-atlas/src/cli.mjs context --change <change-name>
 ```
+
+⚠ **Not `npx set-atlas`.** The package is unclaimed on npm (checked 2026-08-04), so `npx`
+resolves to nothing today — and to whoever claims the name tomorrow. Invoke it by path, or
+link it into the project.
 
 ~5k tokens instead of ~39k, and it says why each screen was picked and what it left out. It
 drives no browser, so it works whether or not the app is running.
@@ -35,7 +39,7 @@ what reaches what, and what nothing reaches.
 **4. After building, check that the change actually landed.**
 
 ```bash
-npx set-atlas --diff
+node <path-to>/set-atlas/src/cli.mjs --diff
 ```
 
 The lines that moved on the surface. If the diff is empty where the plan promised a control, the
@@ -59,8 +63,8 @@ Two more things it does not carry, both stated on the pages themselves:
 ## If the atlas looks out of date
 
 ```bash
-npx set-atlas --check     # exit 1 if the UI moved away from the committed atlas
-npx set-atlas             # regenerate (needs the app running)
+node <path-to>/set-atlas/src/cli.mjs --check   # exit 1 if the UI moved away from the committed atlas
+node <path-to>/set-atlas/src/cli.mjs           # regenerate (needs the app running)
 ```
 
 Never edit `docs/atlas/` by hand. A hand-maintained UI description is wrong within two weeks, and

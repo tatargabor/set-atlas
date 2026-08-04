@@ -12,7 +12,7 @@ obvious place, and nobody noticed until a human clicked through the UI.
 Generate the context first — it answers most of this for you:
 
 ```bash
-npx set-atlas context --change <change-name>
+node <path-to>/set-atlas/src/cli.mjs context --change <change-name>
 ```
 
 ---
@@ -39,7 +39,7 @@ npx set-atlas context --change <change-name>
 
 **Verified after the change:**
 ```bash
-npx set-atlas --diff    # the lines this change moved on the surface
+node <path-to>/set-atlas/src/cli.mjs --diff   # the lines this change moved on the surface
 ```
 <!-- Paste the lines the change was supposed to produce. If the diff is empty
      where you promised a control, the change did not land. -->

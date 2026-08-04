@@ -24,6 +24,10 @@ before(() => {
   }
 
   write("package.json", "{}")
+  // A four-line redirect stub and the page it redirects to — the shape that
+  // produced the wrong `source:` on the consumer.
+  write("src/app/quotes/page.tsx", `import { redirect } from "next/navigation"
+     export default function Page() { redirect("/orders?phase=quotes") }`)
   write(
     "src/app/orders/page.tsx",
     `import { OrderList } from "@/components/order-list"
@@ -149,4 +153,28 @@ test("non-server modules never contribute actions", () => {
   const components = collectComponents("src/app/orders/page.tsx", config())
   const actions = collectServerActions(components, config())
   assert.ok(!actions.some((a) => a.name === "helper"), "a plain export was treated as a server action")
+})
+
+test("REGRESSION: a route that redirects points at the file that DREW the screen", () => {
+  // Reported by the consumer agent 2026-08-04. `/ajanlatok` is four lines —
+  // `redirect("/rendelesek?fazis=quotes")` — so the UI on that atlas page is the
+  // TARGET's, while `source:` pointed at the stub. `source:` is the one line a
+  // reader uses to jump from the map to the code, and this sent them somewhere
+  // with nothing in it.
+  //
+  // ⚠ And it failed in the REASSURING direction: the field was present and
+  // well-formed, so it looked like the source was known. A wrong pointer that
+  // looks right is worse than a missing one.
+  const stub = buildPointers({ url: "/quotes", pattern: "/quotes" }, { root })
+  assert.equal(stub.source, "src/app/quotes/page.tsx")
+  assert.deepEqual(stub.components, [], "the stub imports nothing — that is the tell")
+
+  const followed = buildPointers({ url: "/quotes", pattern: "/quotes", redirectedTo: "/orders?phase=quotes" }, { root })
+  assert.equal(followed.source, "src/app/orders/page.tsx")
+  assert.ok(followed.components.length, "and now the real page's components come with it")
+})
+
+test("a redirect to a path with no page file falls back, rather than losing the pointer", () => {
+  const out = buildPointers({ url: "/quotes", pattern: "/quotes", redirectedTo: "/nowhere" }, { root })
+  assert.equal(out.source, "src/app/quotes/page.tsx")
 })

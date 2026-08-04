@@ -57,6 +57,12 @@ npx set-atlas --check    # exit 1 if the atlas is stale (git hook / CI)
 npx set-atlas --diff     # same gate, and prints WHICH lines moved
 ```
 
+> ⚠ **Not published yet — invoke it by path.** `set-atlas` is unclaimed on npm (checked
+> 2026-08-04: 404), so `npx set-atlas` today resolves to nothing, and the day someone else
+> claims the name it would resolve to *their* package. Until this is published, run it as
+> `node ../set-atlas/src/cli.mjs …` from the consuming project, or link it (`pnpm link`).
+> Reported by a consumer agent that refused to type `npx` for exactly this reason.
+
 ### Planning on it — `integrations/openspec/`
 
 The atlas only pays for itself if the agent that plans the work reads it, and nothing makes that

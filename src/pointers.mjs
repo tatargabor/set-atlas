@@ -163,8 +163,27 @@ export function collectServerActions(components, config) {
  * A silently truncated list is worse than a long one: the reader believes they
  * saw everything. An earlier version cut components at 12 with no marker.
  */
+/**
+ * The route whose FILE drew the screen — not necessarily the one that was asked for.
+ *
+ * ⚠ Reported by the consumer 2026-08-04: `/ajanlatok` is four lines,
+ * `redirect("/rendelesek?fazis=quotes")`, so the atlas page held the target's UI
+ * while `source:` named the stub. `source:` is the one line a reader uses to jump
+ * from the map to the code, and it sent them to a file with nothing in it — a
+ * failure in the REASSURING direction, because the field was there and well-formed.
+ *
+ * The requested route stays the fallback: a redirect to a path with no page file
+ * (a route handler, an external host) must not cost the pointer entirely.
+ */
+function drawnBy(route, config) {
+  const asked = route.pattern ?? route.url
+  if (!route.redirectedTo) return asked
+  const landed = route.redirectedTo.split("?")[0].split("#")[0]
+  return resolveSourceFile(landed, config) ? landed : asked
+}
+
 export function buildPointers(route, config, { maxDirect = 14, maxComponents = 12 } = {}) {
-  const source = resolveSourceFile(route.pattern ?? route.url, config)
+  const source = resolveSourceFile(drawnBy(route, config), config)
   if (!source) return { source: null, ...(config.pointers?.(route, { source: null, components: [] }) ?? {}) }
 
   const components = collectComponents(source, config)

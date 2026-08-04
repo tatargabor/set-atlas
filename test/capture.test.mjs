@@ -133,3 +133,15 @@ function markedFor(root, page, error) {
   writeScreens([screen("/leltar/1", "/leltar/[id]", { error })], { root, outDir: "atlas" })
   return fs.readFileSync(page, "utf8")
 }
+
+test("REGRESSION: a redirect is stated on the page, not silently followed", () => {
+  // The consumer's `/ajanlatok` renders `/rendelesek?fazis=quotes`. Following the
+  // redirect is right — that IS the screen a user sees — but doing it silently
+  // makes two different situations look identical: a route with its own UI, and
+  // a route that is a doorway to someone else's. The reader has to be told which
+  // one they are looking at, and the pointers have to name the file that drew it.
+  const root = tmpRoot()
+  writeScreens([screen("/quotes", "/quotes", { redirectedTo: "/orders?phase=quotes" })], { root, outDir: "atlas" })
+  const page = fs.readFileSync(path.join(root, "atlas", "quotes.md"), "utf8")
+  assert.match(page, /^redirected_to: \/orders\?phase=quotes$/m)
+})

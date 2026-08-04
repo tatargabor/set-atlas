@@ -122,6 +122,13 @@ export async function capture(config, { chromium, onProgress = () => {} }) {
       await page.goto(`${baseUrl}${route.url}`, { waitUntil: "networkidle", timeout: route.timeout ?? 45000 })
       await page.waitForTimeout(route.settleMs ?? settleMs)
 
+      // Where the browser actually ended up. Compared on PATH only: a framework
+      // that appends its own query string to the same page is not a redirect,
+      // and calling it one would put a `redirected_to:` line on half the atlas.
+      const landed = new URL(page.url())
+      const asked = new URL(`${baseUrl}${route.url}`)
+      const redirectedTo = landed.pathname === asked.pathname ? null : landed.pathname + landed.search
+
       // Setup steps — dialogs and tabs that only exist after interaction.
       for (const step of route.actions ?? []) {
         if (step.click) await page.locator(step.click).first().click()
@@ -185,7 +192,8 @@ export async function capture(config, { chromium, onProgress = () => {} }) {
         // row was selected". Same rule as `⚠ N more controls outside this frame`,
         // on the time axis instead of the space axis.
         steps: (route.actions ?? []).map(s => (s.click ? `clicked ${s.click}` : s.press ? `pressed ${s.press}` : null)).filter(Boolean),
-        pointers: buildPointers(route, config),
+        redirectedTo,
+        pointers: buildPointers({ ...route, redirectedTo }, config),
         stats: { rawTokens: estimateTokens(raw), mapTokens: estimateTokens(map), droppedDataLines: flat.droppedDataLines },
       })
       onProgress({ ok: true, route: route.url })
@@ -240,6 +248,11 @@ export function writeScreens(screens, { root, outDir }) {
         // a concrete record id, which is exactly what the map anonymizes away.
         url: screen.state ? screen.url : null,
         title: screen.title,
+        // ⚠ Following a redirect is right — that IS the screen a user lands on —
+        // but doing it silently makes two different things look identical: a
+        // route with its own UI, and a doorway to someone else's. Reported by
+        // the consumer 2026-08-04, where `source:` named a four-line stub.
+        redirected_to: screen.redirectedTo,
         ...screen.pointers,
         // Which renderer produced the block below. A reader who sees
         // `aria-flat` knows the layout facts (columns, scroll depth) are absent
