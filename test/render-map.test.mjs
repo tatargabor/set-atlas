@@ -278,6 +278,39 @@ test("REGRESSION: a table never claims 0 rows while its rows are right below it"
   assert.match(text, /table \(25 rows\)/)
 })
 
+test("REGRESSION: a header row is not a row — the count means the same thing at every size", () => {
+  // Found 2026-08-04 by research/truth-check.mjs, which counts `<tbody>` rows
+  // straight off the raw capture instead of walking regions. Two screens
+  // disagreed with the map; both had a one-row table:
+  //   leltar-id      DOM 1 row   map `table (2 rows)`
+  // The two counting paths had drifted apart. `rowsBelow` sums the repeated
+  // runs, and a header never joins one because it is structurally unlike a data
+  // row — so on the big tables (127, 103, 58, 25 rows measured) it was right.
+  // `ownRows` counts every `tr` the region owns, header included, and it is the
+  // path a small table takes. Same field, two meanings, off by one.
+  //
+  // ⚠ Off by one, on the reassuring side, on a table small enough that nobody
+  // would recount. That is the whole failure class this benchmark exists for:
+  // the format benchmark scored 98% while the map was printing it.
+  const nodes = tree(() => {
+    const out = [node({ w: 1536, h: 200 }), node({ p: 0, tag: "table", w: 1536, h: 125 })]
+    const head = next
+    out.push(node({ p: 1, tag: "thead", w: 1536, h: 40 }))
+    const headRow = next
+    out.push(node({ p: head, tag: "tr", w: 1536, h: 40 }))
+    out.push(node({ p: headRow, tag: "th", name: "Item", w: 700, h: 40 }))
+    const body = next
+    out.push(node({ p: 1, tag: "tbody", w: 1536, h: 85, y: 40 }))
+    const bodyRow = next
+    out.push(node({ p: body, tag: "tr", w: 1536, h: 85, y: 40 }))
+    out.push(node({ p: bodyRow, tag: "td", name: "The only row", w: 700, h: 85, y: 40 }))
+    return out
+  })
+
+  const { text } = renderMap(nodes)
+  assert.match(text, /table \(1 rows?\)/, "the header row was counted as data")
+})
+
 test("a table whose rows cannot be counted states no number rather than a wrong one", () => {
   const nodes = tree(() => [
     node({ w: 1000, h: 400 }),

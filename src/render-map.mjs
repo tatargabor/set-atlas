@@ -95,7 +95,10 @@ function flowFor(node, childCount) {
 function roleFor(nodes, tree, owned) {
   const node = tree.node
   if (tree.repeat) return `repeated item ×${tree.repeat}`
-  const ownRows = owned.filter((n) => n.tag === "tr").length
+  // A header row is a column legend, not a row of data. `rowsBelow` never counted
+  // it — a header does not join a repeated run — so on a big table the field meant
+  // data rows, while here it meant every `tr` and came out one too high.
+  const ownRows = owned.filter((n) => n.tag === "tr" && !inHeader(nodes, n)).length
   const isTable = node.tag === "table" || node.role === "table" || node.role === "grid"
   // A table's rows usually become repeated child regions, which puts them OUTSIDE
   // what the region directly owns — so counting only `owned` reported zero over a
@@ -119,6 +122,15 @@ function roleFor(nodes, tree, owned) {
 }
 
 const isControl = (n) => CONTROL_TAGS.has(n.tag) || CONTROL_ROLES.has(n.role)
+
+/** Walks up to the owning `table` to see whether this row sits in its header. */
+function inHeader(nodes, row) {
+  for (let p = row.p; p >= 0; p = nodes[p].p) {
+    if (nodes[p].tag === "thead") return true
+    if (nodes[p].tag === "table") return false
+  }
+  return false
+}
 
 /**
  * How many rows sit below this region, counted from the repeated runs.
