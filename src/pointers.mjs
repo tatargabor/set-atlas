@@ -8,6 +8,18 @@
 import fs from "node:fs"
 import path from "node:path"
 
+/**
+ * A file that draws something. The test is the EXTENSION, never the directory.
+ *
+ * ⚠ Measured 2026-08-04 on a consumer app: filtering by `/components/` in the path
+ * dropped 130 files, 121 of them `.ts` (server actions, lib) that belong in the
+ * `actions:` field anyway — but it also dropped the route-local client components,
+ * which is where most of that app's UI lives. Its most-edited UI file, 7000 lines,
+ * reported "no screen". The one shared definition lives here so a second consumer
+ * of the rule cannot drift from it.
+ */
+export const isUiFile = (file) => /\.(tsx|jsx)$/.test(file)
+
 /** `/orders/[id]/invoice` → `src/app/orders/[id]/invoice/page.tsx` */
 export function resolveSourceFile(routePattern, { root, appDir = "src/app" }) {
   const segments = routePattern.replace(/^\//, "").split("#")[0]
@@ -202,7 +214,7 @@ export function buildPointers(route, config, { maxDirect = 14, maxComponents = 1
   //
   // Nearest first, so the cap cannot push a depth-1 client out behind shared
   // components a level deeper.
-  const uiComponents = components.filter((c) => /\.(tsx|jsx)$/.test(c.file)).sort((a, b) => a.depth - b.depth)
+  const uiComponents = components.filter((c) => isUiFile(c.file)).sort((a, b) => a.depth - b.depth)
   const allActions = collectServerActions(components, config)
 
   // Depth ≤ 1 means: the page, or a component the page imports directly. That is

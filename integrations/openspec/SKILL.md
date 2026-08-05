@@ -64,9 +64,23 @@ Two more things it does not carry, both stated on the pages themselves:
 ## If the atlas looks out of date
 
 ```bash
+node <path-to>/set-atlas/src/cli.mjs suspect   # which UI files moved past the atlas, and which SCREENS they draw
 node <path-to>/set-atlas/src/cli.mjs --check   # exit 1 if the UI moved away from the committed atlas
 node <path-to>/set-atlas/src/cli.mjs           # regenerate (needs the app running)
 ```
+
+`suspect` is the one that runs **without the app** — repository only, so it fits a pre-commit or
+pre-push hook where the other two cannot. It answers "is the map behind, and which screens should
+I look at?" rather than "is the map behind?", which is the difference between a warning that gets
+acted on and one that gets skipped.
+
+## This skill is not the only place the atlas belongs
+
+⚠ Measured 2026-08-05 on the consuming project: of the five skills that run the rest of the spec
+cycle — `apply`, `continue`, `verify`, `archive`, `explore` — **none mentioned the atlas**. The
+integration fired only when somebody happened to remember it.
+
+`integrations/openspec/phases.md` has a short block for each of those phases, plus the hook.
 
 Never edit `docs/atlas/` by hand. A hand-maintained UI description is wrong within two weeks, and
 a stale map is worse than none because planning quietly builds on it.

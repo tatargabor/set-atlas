@@ -1,0 +1,122 @@
+// The cheap gate: has a file that DRAWS a screen moved since the atlas was recorded?
+//
+// The expensive check (`--check`, `--diff`) needs the app running, a database and a
+// login. Pre-commit and pre-push hooks deliberately run with none of those, so the
+// real check cannot live there — it would either fall over or, worse, pass quietly.
+//
+// This one runs on the repository alone: the atlas states which commit it came from
+// (`generated_from_commit`), git says which UI files moved since, and the atlas's own
+// pointers say which SCREENS those files draw. Naming the screens is the point — "3 UI
+// files changed" sends the author to look at all 33; "these two screens" is a warning
+// someone acts on.
+//
+// ⚠ It reports SUSPICION, never a fact. Without the app it cannot know whether the
+// surface actually moved — only that something which draws one did. This is the
+// Doorstop "suspect link" pattern: the system makes a statement about its own
+// bookkeeping, not about the world. Claiming more would be the reassuring-direction
+// error this package exists to catch.
+
+import fs from "node:fs"
+import path from "node:path"
+import { execFileSync } from "node:child_process"
+import { isUiFile } from "./pointers.mjs"
+import { readAtlas, selectPages } from "./context.mjs"
+
+/** The commit the atlas was generated from, or null when it cannot be dated. */
+export function atlasCommit(atlasDir) {
+  const index = path.join(atlasDir, "INDEX.md")
+  if (!fs.existsSync(index)) return null
+  const m = fs.readFileSync(index, "utf8").match(/^generated_from_commit:\s*(\S+)\s*$/m)
+  return m && m[1] !== "null" ? m[1] : null
+}
+
+/**
+ * Of the paths given, the ones that draw something.
+ *
+ * The atlas's own output is excluded: regenerating writes `docs/atlas/*.md`, and
+ * counting those would leave the gate firing about the very run that satisfied it.
+ */
+export const uiFilesChanged = (files, { outDir = "docs/atlas" } = {}) =>
+  files.filter((f) => isUiFile(f) && !f.startsWith(`${outDir}/`))
+
+/** Paths changed between `since` and the working tree, per git. */
+export function changedFiles({ root, since, run = defaultRun }) {
+  try {
+    return run(["-C", root, "diff", "--name-only", since, "--"])
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean)
+  } catch {
+    // An unknown commit (history rewritten, shallow clone, atlas from another
+    // branch) is not "nothing changed". Say it out loud rather than return [].
+    return null
+  }
+}
+
+const defaultRun = (args) => execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
+
+/**
+ * The report. `suspect` is what a gate acts on; `text` is what a human reads.
+ *
+ * An atlas that cannot be dated counts as SUSPECT. A gate that answers "fine" when
+ * its evidence is missing reports a check that never ran, which is the failure this
+ * whole package is about.
+ */
+export function suspectReport({ atlasDir, commit, files, top = 8 }) {
+  const lines = []
+  const ui = uiFilesChanged(files ?? [])
+
+  if (!commit) {
+    lines.push("⚠ The atlas cannot be dated — its INDEX.md carries no `generated_from_commit`.")
+    lines.push("  Nothing can be said about whether it is behind the UI. Regenerate it once, and")
+    lines.push("  the next run of this gate becomes meaningful.")
+    return { suspect: true, text: lines.join("\n"), screens: [], files: ui }
+  }
+
+  if (files === null) {
+    lines.push(`⚠ git could not compare against \`${commit}\` — unknown commit, shallow clone, or a rewritten history.`)
+    lines.push("  Treated as suspect: an unanswerable question is not a clean answer.")
+    return { suspect: true, text: lines.join("\n"), screens: [], files: [] }
+  }
+
+  if (!ui.length) {
+    lines.push(`✓ No file that draws a screen has moved since the atlas was recorded (\`${commit}\`).`)
+    lines.push(`  ${(files ?? []).length} file(s) changed in total; none of them render.`)
+    return { suspect: false, text: lines.join("\n"), screens: [], files: [] }
+  }
+
+  // Which screens those files draw. The atlas's own `source:` and `components:`
+  // fields already answer this — the same matching the `context --files` form uses.
+  const pages = fs.existsSync(atlasDir) ? readAtlas(atlasDir) : []
+  const ranked = selectPages(pages, ui.join("\n")).slice(0, top)
+
+  lines.push(`⚠ SUSPECT — ${ui.length} file(s) that draw a screen have moved since the atlas was recorded (\`${commit}\`).`)
+  lines.push("")
+  for (const f of ui.slice(0, 12)) lines.push(`    ${f}`)
+  if (ui.length > 12) lines.push(`    … and ${ui.length - 12} more`)
+  lines.push("")
+
+  if (ranked.length) {
+    // ⚠ `route` and `file` are what readAtlas actually returns. An earlier version
+    // read `url` and `slug`, and printed `undefined → undefined.md` for every
+    // screen — while its unit test stayed green, because the fixture happened to
+    // carry `url` and the assertion was matching the file list above.
+    const all = selectPages(pages, ui.join("\n"))
+    lines.push("  Screens these files draw — check these, not all of them:")
+    for (const p of ranked) lines.push(`    ${(p.route ?? p.url ?? "?").padEnd(28)} →  ${p.file}${p.stale ? "   ⚠ stale" : ""}`)
+    if (all.length > ranked.length) lines.push(`    ⚠ ${all.length - ranked.length} more matched and were not listed (--top).`)
+  } else {
+    // ⚠ Worth saying, not swallowing: a UI file that maps to no screen is either a
+    // new screen the atlas has never recorded, or a component the pointers missed.
+    // Both are things the author should know about.
+    lines.push("  ⚠ None of these files maps to a screen in the atlas. Either they draw a")
+    lines.push("    screen that was never recorded, or the pointers do not reach them.")
+  }
+
+  lines.push("")
+  lines.push("  This is SUSPICION, not proof. This check runs without the app, so it cannot tell")
+  lines.push("  whether the surface actually moved — only that something which draws one did.")
+  lines.push("  To settle it:  node <path-to>/set-atlas/src/cli.mjs --diff   (needs the app running)")
+
+  return { suspect: true, text: lines.join("\n"), screens: ranked, files: ui }
+}

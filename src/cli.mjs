@@ -6,6 +6,7 @@
 //   npx set-atlas --check             # writes nothing; exits 1 if the atlas is stale
 //   npx set-atlas --diff              # same gate, but prints WHICH lines moved
 //   npx set-atlas context --change X  # the few screens THIS change concerns (no browser)
+//   npx set-atlas suspect             # UI files moved since the atlas was recorded? (no app)
 
 import fs from "node:fs"
 import os from "node:os"
@@ -15,6 +16,7 @@ import { createRequire } from "node:module"
 import { capture, writeScreens, withoutProvenance, slugFor } from "./capture.mjs"
 import { formatDiff } from "./diff.mjs"
 import { buildContext } from "./context.mjs"
+import { atlasCommit, changedFiles, suspectReport } from "./suspect.mjs"
 
 const args = process.argv.slice(2)
 const flag = (name) => {
@@ -30,6 +32,22 @@ if (!fs.existsSync(configPath)) {
 
 const config = (await import(pathToFileURL(configPath).href)).default
 config.root ??= path.dirname(configPath)
+
+// `suspect` is the gate that can live in a pre-commit or pre-push hook: it needs
+// the repository and nothing else — no app, no database, no login. Same reason it
+// sits above the Playwright resolution as `context` does.
+if (args[0] === "suspect") {
+  const atlasDir = path.join(config.root, config.outDir)
+  const commit = flag("--since") || atlasCommit(atlasDir)
+  const files = typeof commit === "string" ? changedFiles({ root: config.root, since: commit }) : []
+  const report = suspectReport({ atlasDir, commit: typeof commit === "string" ? commit : null, files, top: Number(flag("--top")) || 8 })
+  console.log(report.text)
+  // ⚠ Warning by default, and this is a decision, not a default nobody thought
+  // about. A gate introduced as blocking on an existing tree earns its first
+  // SKIP=1 the same week, and a skipped gate is a dead one. `--strict` is there
+  // for the repo that has caught up and wants to stay caught up.
+  process.exit(report.suspect && args.includes("--strict") ? 1 : 0)
+}
 
 // `context` reads the atlas that is already on disk — it drives no browser and
 // must not require one. Handled before Playwright is resolved so that planning

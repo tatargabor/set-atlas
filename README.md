@@ -55,7 +55,26 @@ result — if the pages changed, the surface changed.
 npx set-atlas            # regenerate
 npx set-atlas --check    # exit 1 if the atlas is stale (git hook / CI)
 npx set-atlas --diff     # same gate, and prints WHICH lines moved
+npx set-atlas suspect    # NO app needed: which UI files moved past the atlas, and which screens they draw
 ```
+
+The first three need the app running, with its database and a login — which is exactly what a
+pre-commit or pre-push hook does *not* have. Putting them there gets you a hook that falls over,
+or one that passes quietly because it could not do its job. `suspect` is the version that fits a
+hook: the atlas states the commit it was recorded from, git says which files that *draw* a screen
+have moved since, and the atlas's own pointers say **which screens those files draw**.
+
+```
+⚠ SUSPECT — 15 file(s) that draw a screen have moved since the atlas was recorded (`758f4997`).
+  Screens these files draw — check these, not all of them:
+    /ajanlatok/[id]              →  ajanlatok-id.md
+    /rendelesek/[id]             →  rendelesek-id.md
+```
+
+Naming the screens is the point: *"15 UI files changed"* sends the author to look at all 33
+screens, which means looking at none. It warns rather than blocks by default — without the app it
+cannot know whether the *surface* moved, only that something which draws one did, and a gate that
+overstates its evidence stops being trusted. `--strict` exits 1, for a repo that has caught up.
 
 > ⚠ **Not published yet — invoke it by path.** `set-atlas` is unclaimed on npm (checked
 > 2026-08-04: 404), so `npx set-atlas` today resolves to nothing, and the day someone else
@@ -81,6 +100,10 @@ on a machine where the app isn't even running.
   `## Surface fit` section, and which failure each of its questions catches.
 - [`integrations/openspec/SKILL.md`](integrations/openspec/SKILL.md) — a Claude Code skill to copy
   into the consuming project.
+- [`integrations/openspec/phases.md`](integrations/openspec/phases.md) — a block for each of the
+  *other* phases: apply, continue, verify, archive, explore, plus the hook. ⚠ Measured on the
+  consuming project 2026-08-05: all five of those skills existed and **none of them mentioned the
+  atlas**, so the integration fired only when somebody happened to remember it.
 
 The neighbourhood deliberately excludes links present on over 60% of screens: with the app's
 sidebar counted, *"one link away"* listed 25 screens, 24 of them furniture. What it excluded is
