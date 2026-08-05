@@ -249,8 +249,16 @@ export function renderMap(nodes, { visual = true, dataPatterns = [] } = {}) {
     }
 
     const flow = visual ? flowFor(node, t.children.length + own.length) : ""
+    // How much of this region a test or a recorded walkthrough can hold on to.
+    // ⚠ The COUNT, never the ids. A list of test ids reads as "you can write E2E
+    // from this map", and the atlas cannot promise the thing that claim needs:
+    // that an id is unique. Measured in the consumer app the same week — `sku-`
+    // stopped being unique when a shared combobox started emitting `sku-copy-<id>`,
+    // and a prefix match silently drove the wrong element. The ids stay the
+    // source's business; what the map adds is that the gap is now visible.
+    const anchored = own.length ? ` · ${own.filter((c) => c.testid).length}/${own.length} anchored` : ""
     lines.push(
-      `${pad}- ${roleFor(nodes, t, owned)}${node.testid ? ` #${node.testid}` : ""}${title ? ` "${title}"` : ""} [${node.w}×${node.h}${flow ? ` ${flow}` : ""}]` +
+      `${pad}- ${roleFor(nodes, t, owned)}${node.testid ? ` #${node.testid}` : ""}${title ? ` "${title}"` : ""} [${node.w}×${node.h}${flow ? ` ${flow}` : ""}]${anchored}` +
         `${notes.length ? " — " + notes.join(" · ") : ""}`
     )
     controls += own.length

@@ -164,7 +164,7 @@ tokens: 604
     - panel [1536×944 row]
       - scrollable list "Incoming orders" [319×761] — ⇅ 24914px of content in a 761px frame
         - repeated item ×257 [319×88]
-      - tab bar + panel [725×998 column]
+      - tab bar + panel [725×998 column] · 2/4 anchored
         - tab "Details" [selected]
         - tab "Items"
         - button "Approve" [right]
@@ -173,6 +173,19 @@ tokens: 604
 Three panes side by side, the sizes that say which is the list and which is the detail, a list 33
 screens deep behind a 761px window, and which end of a bar each action sits on. A flat tree can
 express none of it; a screenshot shows neither the scroll depth nor the exact count.
+
+`· 2/4 anchored` says how many of a region's own controls carry a `data-testid` — here, two of
+four. It answers one question and refuses another. The one it answers: *how much of this screen
+can a test or a recorded walkthrough hold on to at all?* Today that is only knowable by grepping
+the source, screen by screen; on one measured app it ranged from 100% down to **10%** across
+33 screens, and nobody could see the gap.
+
+⚠ **The ids themselves are deliberately not printed.** A list of test ids reads as *"you can write
+an E2E test from this map"*, and the atlas cannot promise what that claim needs — that an id is
+unique. Measured on a real app: a `sku-` prefix stopped being unique the day a shared combobox
+began emitting `sku-copy-<id>`, and a prefix match silently drove the wrong element. Uniqueness
+is the source's business. The count is the part a map can honestly carry, and it costs 5% of the
+map, against 93% for the ids.
 
 `[right]` / `[centre]` mark position **within** a region — left is the default and carries no
 marker, so a plain column costs nothing. Adding this layer measured 48/49 against 46/49 without it,

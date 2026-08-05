@@ -278,6 +278,39 @@ test("REGRESSION: a table never claims 0 rows while its rows are right below it"
   assert.match(text, /table \(25 rows\)/)
 })
 
+test("a region says how many of its controls can be anchored, and never lists them", () => {
+  // Asked for by the consumer 2026-08-05, in their own words: "not «give us the
+  // anchors» — make it measurable how many interactive elements can be anchored
+  // at all". Both of their threads argued AGAINST printing the ids themselves:
+  // a full test-id tree reads as "you can write E2E from this", and the atlas
+  // cannot promise that a `data-testid` is unique. Measured on their app the same
+  // day: `sku-` stopped being unique the moment a shared combobox added
+  // `sku-copy-<id>`, and a prefix match silently clicked the wrong element.
+  //
+  // Priced before building: the ids themselves cost +25 150 tokens over 33 real
+  // screens (+93%); the two numbers cost 2 512 (+11%).
+  const nodes = tree(() => [
+    node({ w: 1000, h: 400 }),
+    node({ p: 0, tag: "button", testid: "btn-approve", name: "Approve", w: 120, h: 32 }),
+    node({ p: 0, tag: "button", name: "Reject", w: 120, h: 32, x: 130 }),
+    node({ p: 0, tag: "a", name: "Details", w: 120, h: 32, x: 260 }),
+  ])
+
+  const { text } = renderMap(nodes)
+  assert.match(text, /· 1\/3 anchored/, "the region did not state how much of it is anchorable")
+  assert.doesNotMatch(text, /btn-approve/, "the ids themselves were printed — that is the promise we refused")
+})
+
+test("a region with no controls of its own says nothing about anchoring", () => {
+  // 25 of 590 regions on the censused screens hold no control at all. `0/0
+  // anchored` on every one of them is a line paid for and read for nothing —
+  // the same reason the empty-leaf region is not printed.
+  const nodes = tree(() => [node({ w: 1000, h: 400 }), node({ p: 0, tag: "h2", name: "A heading", w: 300, h: 40 })])
+
+  const { text } = renderMap(nodes)
+  assert.doesNotMatch(text, /anchored/)
+})
+
 test("REGRESSION: a header row is not a row — the count means the same thing at every size", () => {
   // Found 2026-08-04 by research/truth-check.mjs, which counts `<tbody>` rows
   // straight off the raw capture instead of walking regions. Two screens
