@@ -39,8 +39,15 @@ config.root ??= path.dirname(configPath)
 if (args[0] === "suspect") {
   const atlasDir = path.join(config.root, config.outDir)
   const commit = flag("--since") || atlasCommit(atlasDir)
-  const files = typeof commit === "string" ? changedFiles({ root: config.root, since: commit }) : []
-  const report = suspectReport({ atlasDir, commit: typeof commit === "string" ? commit : null, files, top: Number(flag("--top")) || 8 })
+  const changed = typeof commit === "string" ? changedFiles({ root: config.root, since: commit }) : { files: [], deleted: [] }
+  const report = suspectReport({
+    atlasDir,
+    commit: typeof commit === "string" ? commit : null,
+    // `null` means git could not answer — a question the gate must not read as "clean".
+    files: changed?.files ?? null,
+    deleted: changed?.deleted ?? [],
+    top: Number(flag("--top")) || 8,
+  })
   console.log(report.text)
   // ⚠ Warning by default, and this is a decision, not a default nobody thought
   // about. A gate introduced as blocking on an existing tree earns its first

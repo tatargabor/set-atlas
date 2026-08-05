@@ -39,16 +39,30 @@ export function atlasCommit(atlasDir) {
 export const uiFilesChanged = (files, { outDir = "docs/atlas" } = {}) =>
   files.filter((f) => isUiFile(f) && !f.startsWith(`${outDir}/`))
 
-/** Paths changed between `since` and the working tree, per git. */
+/**
+ * Paths changed between `since` and the working tree, per git, with the deleted
+ * ones kept apart.
+ *
+ * ⚠ The distinction is not cosmetic. Measured on the consumer 2026-08-05: two
+ * routes were not modified but REMOVED — the editor moved into a tab of another
+ * screen and its client file was deleted. Reported as an ordinary change, the gate
+ * names the right page and says the wrong thing about it.
+ */
 export function changedFiles({ root, since, run = defaultRun }) {
   try {
-    return run(["-C", root, "diff", "--name-only", since, "--"])
+    const rows = run(["-C", root, "diff", "--name-status", since, "--"])
       .split("\n")
-      .map((l) => l.trim())
-      .filter(Boolean)
+      .map((l) => l.split("\t"))
+      .filter((p) => p.length >= 2)
+    return {
+      files: rows.map((p) => p[p.length - 1].trim()).filter(Boolean),
+      // Renames arrive as `R100\told\tnew`; the old path is gone from that route's
+      // point of view, but the new one is right there, so it is not a deletion.
+      deleted: rows.filter((p) => p[0].startsWith("D")).map((p) => p[1].trim()),
+    }
   } catch {
     // An unknown commit (history rewritten, shallow clone, atlas from another
-    // branch) is not "nothing changed". Say it out loud rather than return [].
+    // branch) is not "nothing changed". Say it out loud rather than return null.
     return null
   }
 }
@@ -62,9 +76,10 @@ const defaultRun = (args) => execFileSync("git", args, { encoding: "utf8", stdio
  * its evidence is missing reports a check that never ran, which is the failure this
  * whole package is about.
  */
-export function suspectReport({ atlasDir, commit, files, top = 8 }) {
+export function suspectReport({ atlasDir, commit, files, deleted = [], top = 8 }) {
   const lines = []
   const ui = uiFilesChanged(files ?? [])
+  const gone = uiFilesChanged(deleted ?? [])
 
   if (!commit) {
     lines.push("⚠ The atlas cannot be dated — its INDEX.md carries no `generated_from_commit`.")
@@ -102,9 +117,24 @@ export function suspectReport({ atlasDir, commit, files, top = 8 }) {
     // screen — while its unit test stayed green, because the fixture happened to
     // carry `url` and the assertion was matching the file list above.
     const all = selectPages(pages, ui.join("\n"))
+    // A page whose drawing file was DELETED is not a page to re-read — it may
+    // describe a screen that no longer exists, and the atlas keeps such a page on
+    // purpose (from outside, a deleted and a never-existing screen look alike).
+    // Saying which is which is the gate's job; the page cannot say it itself.
+    const removed = gone.length ? selectPages(pages, gone.join("\n")) : []
+    const removedFiles = new Set(removed.map((p) => p.file))
+
     lines.push("  Screens these files draw — check these, not all of them:")
-    for (const p of ranked) lines.push(`    ${(p.route ?? p.url ?? "?").padEnd(28)} →  ${p.file}${p.stale ? "   ⚠ stale" : ""}`)
+    for (const p of ranked) {
+      const mark = removedFiles.has(p.file) ? "   ⚠ its drawing file was DELETED — this page may describe a screen that is gone" : p.stale ? "   ⚠ stale" : ""
+      lines.push(`    ${(p.route ?? p.url ?? "?").padEnd(28)} →  ${p.file}${mark}`)
+    }
     if (all.length > ranked.length) lines.push(`    ⚠ ${all.length - ranked.length} more matched and were not listed (--top).`)
+    if (removed.length) {
+      lines.push("")
+      lines.push(`  ${removed.length} of them lost a file that drew them. A regeneration will DROP those pages,`)
+      lines.push("  not update them — and until it runs, the atlas describes screens that may not exist.")
+    }
   } else {
     // ⚠ Worth saying, not swallowing: a UI file that maps to no screen is either a
     // new screen the atlas has never recorded, or a component the pointers missed.

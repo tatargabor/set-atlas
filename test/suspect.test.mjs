@@ -82,6 +82,33 @@ test("no UI file moved — the gate is clean and says what it checked", () => {
   assert.match(report.text, /abc1234/, "a clean result that does not say what it compared against cannot be audited")
 })
 
+test("a DELETED drawing file is a stronger claim than a changed one", () => {
+  // Reported by the consumer 2026-08-05, hours after this gate shipped: two routes
+  // did not change, they were REMOVED — the editor moved into a tab of another
+  // screen, and `quote-editor-client.tsx` was deleted. The gate named the right
+  // page and said the wrong thing about it: "check this screen" instead of "this
+  // page probably describes a screen that no longer exists".
+  //
+  // ⚠ This is the failure class the tool is for, aimed at the tool. A stale page
+  // that merely lags is a page you re-read; a page for a route that is gone is one
+  // that plans get built on. The atlas keeps it deliberately (from outside, a
+  // deleted and a never-existing screen look the same) — so the gate has to say it.
+  const dir = tmp({
+    "INDEX.md": "---\ngenerated_from_commit: abc1234\n---\n",
+    "listaz.md": "---\nroute: /listaz\nurl: /listaz\nsource: src/app/orders/page.tsx\ncomponents:\n  - src/app/orders/orders-client.tsx\n---\n\n- panel [100×100]\n",
+  })
+
+  const report = suspectReport({
+    atlasDir: dir,
+    commit: "abc1234",
+    files: ["src/app/orders/orders-client.tsx"],
+    deleted: ["src/app/orders/orders-client.tsx"],
+  })
+  assert.equal(report.suspect, true)
+  assert.match(report.text, /deleted|no longer exist|removed/i, "a deleted drawing file read as an ordinary change")
+  assert.match(report.text, /listaz/, "the page whose drawing file was deleted was not named")
+})
+
 test("the warning states that suspicion is not proof", () => {
   // ⚠ This gate runs WITHOUT the app, so it cannot know whether the surface
   // actually changed — only that a file which draws one moved. Claiming more than
