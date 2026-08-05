@@ -23,6 +23,25 @@ const MIN_REGION_W = 40
 const MIN_REGION_H = 24
 
 const area = (n) => n.w * n.h
+
+/**
+ * Visible enough to belong on the map.
+ *
+ * ⚠ This is GEOMETRIC, not computed visibility, and the difference is a known
+ * limit rather than an oversight. It catches what a browser gives a zero box:
+ * `display:none`, a collapsed container, an unmounted branch. It does NOT catch an
+ * element that keeps its full box while being hidden some other way — `clip-path`,
+ * `content-visibility`, or a parent's `overflow:hidden` scrolled away from it.
+ *
+ * Measured 2026-08-05 across 33 real screens (39 924 nodes): `visibility:hidden`
+ * zero, zero-sized 4 474 (11%), full-sized but positioned off-screen zero. So on
+ * that app the rule holds — including for a tab library that keeps inactive panels
+ * mounted, because it hides them with `display:none`.
+ *
+ * It is therefore true by circumstance, not by construction. No test guards the
+ * uncovered case: this project does not write tests for hypotheticals, and there
+ * is no measured instance yet. If one appears, it belongs here first.
+ */
 const visible = (n) => n.w > 0 && n.h > 0 && n.vis !== "hidden" && n.op !== "0"
 
 const overlap = (a, b) => {
