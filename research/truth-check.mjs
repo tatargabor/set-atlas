@@ -22,6 +22,18 @@
 //   twice, and only unanimous readers caught it. Open the screen before calling
 //   anything a bug.
 //
+// ⚠⚠ DO NOT move this counter into the renderer, however tempting it looks.
+//   It counts better than `rowsBelow` does on a small table — after the header-row
+//   fix, `leltar` prints `table` with no number where this would say 1. That looks
+//   like an obvious improvement and it would destroy the only thing this file is
+//   for: a benchmark that shares its subject's counting agrees with it forever, and
+//   every future run would come back clean whatever the renderer did. The renderer
+//   stays on the region walk; this stays outside it. That is the whole design.
+//
+//   This warning lives here, in the file someone would edit, and not only in the
+//   working log — a constraint that exists solely in a note the next session may
+//   not read is a constraint that has already been lost.
+//
 //   ATLAS_CONSUMER=/path/to/app node research/truth-check.mjs        # every screen
 //   node research/truth-check.mjs penzugy                            # one screen
 //   node research/truth-check.mjs --verbose                          # print the map lines too
