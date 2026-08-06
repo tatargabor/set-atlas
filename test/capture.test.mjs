@@ -161,3 +161,23 @@ test("the atlas states which GENERATOR made it, not only which commit it read", 
   const index = fs.readFileSync(path.join(root, "atlas", "INDEX.md"), "utf8")
   assert.match(index, /^generator_version: \S+/m)
 })
+
+test("REGRESSION: the stamp is the commit the recording STARTED from", () => {
+  // Measured by a consumer 2026-08-06, and the direction of the error is the
+  // point. A full recording takes them ~12 minutes; the stamp was taken at the
+  // END of it. So a commit landing DURING the window — theirs landed at 10:10:30
+  // inside a 10:03→10:14:52 run — became the stamp, and the atlas then claims to
+  // describe a state it never saw.
+  //
+  // ⚠ That error points the reassuring way: `suspect` compares from the stamp
+  // forward, so anything committed mid-run reads as "already recorded". Stamping
+  // the START instead can only make the window WIDER — the gate may ask about a
+  // file that was in fact captured, which costs a look, not a false all-clear.
+  // Excluding `docs/atlas/` does not help here: that hides our own output, not
+  // someone else's commit landing mid-run.
+  const root = tmpRoot()
+  writeScreens([screen("/orders", "/orders")], { root, outDir: "atlas", recordedFrom: "deadbee" })
+
+  const index = fs.readFileSync(path.join(root, "atlas", "INDEX.md"), "utf8")
+  assert.match(index, /^generated_from_commit: deadbee$/m, "the stamp ignored the commit the run started from")
+})

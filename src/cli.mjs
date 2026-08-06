@@ -13,7 +13,7 @@ import os from "node:os"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { createRequire } from "node:module"
-import { capture, writeScreens, withoutProvenance, slugFor, generatorVersion } from "./capture.mjs"
+import { capture, writeScreens, withoutProvenance, slugFor, generatorVersion, headCommit } from "./capture.mjs"
 import { formatDiff } from "./diff.mjs"
 import { buildContext } from "./context.mjs"
 import { atlasCommit, changedFiles, suspectReport, provenanceIsUncommitted } from "./suspect.mjs"
@@ -147,10 +147,17 @@ if (!chromium) {
 // intent, and the gap between them is where a feature ships unreachable.
 const showDiff = args.includes("--diff")
 const checkOnly = args.includes("--check") || showDiff
+// ⚠ Taken BEFORE the run, not after it. A full recording takes minutes; a commit
+// landing inside that window would otherwise become the stamp, and the atlas
+// would claim to describe a state it never saw — wrong in the reassuring
+// direction, since `suspect` compares from the stamp forward. Measured by a
+// consumer 2026-08-06 on a 12-minute run. See headCommit.
+const recordedFrom = headCommit(config.root)
 const screens = await capture(
   { ...config, outDir: checkOnly ? null : config.outDir },
   {
     chromium,
+    recordedFrom,
     // A degraded screen is neither a pass nor a failure, and printing it as
     // either hides it — `✓` would claim a layout map that isn't there.
     onProgress: ({ ok, warn, route, error }) =>
@@ -181,7 +188,7 @@ if (checkOnly) {
   // Staleness check: compare the freshly recorded pages against what's on disk.
   // Nothing is written — the caller (a git hook, CI) decides from the exit code.
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "set-atlas-"))
-  writeScreens(screens, { root: tmp, outDir: "." })
+  writeScreens(screens, { root: tmp, outDir: ".", recordedFrom })
   reportSize()
   const dir = path.join(config.root, config.outDir)
   const read = (file) => (fs.existsSync(file) ? withoutProvenance(fs.readFileSync(file, "utf-8")) : null)

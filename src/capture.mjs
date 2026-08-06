@@ -18,14 +18,39 @@ import { buildActions, buildNavigation } from "./crosscut.mjs"
  * it silently. The commit is the consumer's HEAD: the atlas describes the app as
  * that code rendered it.
  */
-function provenance(root) {
-  let commit = null
+function provenance(root, recordedFrom) {
+  return {
+    generated_at: new Date().toISOString(),
+    // `recordedFrom` is the commit the RUN STARTED from. See headCommit for why
+    // that, and not the commit that happens to be HEAD when the writing begins.
+    generated_from_commit: recordedFrom ?? headCommit(root),
+    generator_version: generatorVersion(),
+  }
+}
+
+/**
+ * The consumer's HEAD — the code state the atlas describes.
+ *
+ * ⚠ Take this BEFORE the recording starts, not when the pages are written.
+ * Measured by a consumer 2026-08-06: a full run takes them ~12 minutes, the stamp
+ * was taken at the end, and a commit that landed at 10:10:30 — inside a
+ * 10:03→10:14:52 run — became the stamp. The atlas then claims to describe a
+ * state that did not exist while it was being recorded.
+ *
+ * The direction of that error is what makes it worth fixing: `suspect` compares
+ * from the stamp forward, so anything committed mid-run reads as "already
+ * recorded" — wrong in the reassuring way. Stamping the start can only make the
+ * window wider: the gate may ask about a file that was in fact captured, which
+ * costs one look. Excluding `docs/atlas/` does not cover this; that hides our own
+ * output, not someone else's commit landing mid-run.
+ */
+export function headCommit(root) {
   try {
-    commit = execFileSync("git", ["-C", root, "rev-parse", "--short", "HEAD"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim()
+    return execFileSync("git", ["-C", root, "rev-parse", "--short", "HEAD"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() || null
   } catch {
     // Not a git checkout, or git is absent. Say nothing rather than guess.
+    return null
   }
-  return { generated_at: new Date().toISOString(), generated_from_commit: commit, generator_version: generatorVersion() }
 }
 
 /**
@@ -309,12 +334,12 @@ export async function capture(config, { chromium, onProgress = () => {} }) {
 
   await browser.close()
 
-  if (outDir) writeScreens(screens, { root, outDir })
+  if (outDir) writeScreens(screens, { root, outDir, recordedFrom })
   return screens
 }
 
 /** One markdown page per screen, so the diff stays readable. */
-export function writeScreens(screens, { root, outDir }) {
+export function writeScreens(screens, { root, outDir, recordedFrom = null }) {
   const dir = path.join(root, outDir)
 
   // Refuse BEFORE writing anything. The filename comes from the pattern, so two
@@ -404,7 +429,7 @@ export function writeScreens(screens, { root, outDir }) {
   const index = [
     frontmatter({
       generator: "set-atlas",
-      ...provenance(root),
+      ...provenance(root, recordedFrom),
       screens: ok.length,
       total_tokens: ok.reduce((a, s) => a + (s.stats.pageTokens ?? s.stats.mapTokens), 0),
     }),
