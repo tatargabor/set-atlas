@@ -102,7 +102,18 @@ export function generatorVersion() {
  * becomes stale, or becomes stale for a different reason, is a real change and
  * has to fire the gate once.
  */
-const PROVENANCE_LINE = /^(generated_at|generated_from_commit|stale_since):/
+// `generator_version` is here for the same reason as the timestamp, and it was
+// caught by a consumer reading the code rather than waiting for the symptom: the
+// field carries this tool's own short SHA, so it moves on EVERY commit to it —
+// four went in on the morning it was added. Left in the comparison, `--check`
+// would call the atlas stale after each of them with every page byte-identical.
+//
+// ⚠ What settles it: if a tool change really did alter the format, the PAGES say
+// so and the gate fires on those. So this line is either redundant or it is the
+// only thing firing — and the second is a false alarm. It stays out of the
+// comparison and stays in the file, where `suspect` reads it to say "a format
+// change moved these pages, not the UI".
+const PROVENANCE_LINE = /^(generated_at|generated_from_commit|generator_version|stale_since):/
 export const withoutProvenance = (text) =>
   text.split("\n").filter((l) => !PROVENANCE_LINE.test(l)).join("\n")
 

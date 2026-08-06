@@ -181,3 +181,27 @@ test("REGRESSION: the stamp is the commit the recording STARTED from", () => {
   const index = fs.readFileSync(path.join(root, "atlas", "INDEX.md"), "utf8")
   assert.match(index, /^generated_from_commit: deadbee$/m, "the stamp ignored the commit the run started from")
 })
+
+test("REGRESSION: a new generator version alone does not read as UI drift", () => {
+  // Caught by a consumer 2026-08-06, reading the code rather than waiting for the
+  // symptom: `generator_version` carries our own short SHA, so it changes on EVERY
+  // commit to this tool. Left in the content comparison, `--check` would call the
+  // atlas stale after each of our commits — four went in that same morning — even
+  // when every page is byte-identical.
+  //
+  // ⚠ The argument that settles it: if a tool change really did alter the format,
+  // the PAGES say so and --check fires on them. So this line is either redundant
+  // or it is the only thing firing, and the second is a false alarm. Same reasoning
+  // as `generated_at`, one line above, and the same rule it protects: a gate that
+  // always fires is a gate nobody keeps.
+  //
+  // It stays OUT of the comparison but stays IN the file — `suspect` reads it there
+  // to say "a format change moved these pages, not the UI", which is the whole
+  // reason the field was added.
+  const a = "---\ngenerated_from_commit: abc\ngenerator_version: 0.1.0+aaaaaaa\nscreens: 3\n---\n"
+  const b = "---\ngenerated_from_commit: abc\ngenerator_version: 0.1.0+bbbbbbb\nscreens: 3\n---\n"
+  assert.equal(withoutProvenance(a), withoutProvenance(b), "a tool upgrade alone read as surface drift")
+
+  // Narrow exception, not a blanket one: a real difference still counts.
+  assert.notEqual(withoutProvenance(a), withoutProvenance(a.replace("screens: 3", "screens: 4")))
+})
