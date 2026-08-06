@@ -109,6 +109,24 @@ test("a DELETED drawing file is a stronger claim than a changed one", () => {
   assert.match(report.text, /listaz/, "the page whose drawing file was deleted was not named")
 })
 
+test("an uncommitted provenance is announced — the gate says whose atlas it read", () => {
+  // Found by the consumer 2026-08-06, and they were right to check the number:
+  // I ran the gate on their tree and reported "✓ level with `0d5bbd9a`", while
+  // their COMMIT carried `ea855349`. A second regeneration had rewritten the
+  // atlas in the working tree without being committed.
+  //
+  //   git show HEAD:docs/atlas/INDEX.md → generated_from_commit: ea855349
+  //   working tree                      → generated_from_commit: 0d5bbd9a
+  //
+  // ⚠ Reading the working tree is the RIGHT default — the gate exists to answer
+  // "is the map behind the code in front of me". But a green answer about an
+  // uncommitted atlas is not the answer CI or a reviewer would get, and unsaid,
+  // it reads as if it were. The measurement was fine; the silence was not.
+  const dir = tmp({ "INDEX.md": "---\ngenerated_from_commit: abc1234\n---\n" })
+  const report = suspectReport({ atlasDir: dir, commit: "abc1234", files: [], provenanceUncommitted: true })
+  assert.match(report.text, /uncommitted|working tree/i, "the gate reported on an uncommitted atlas without saying so")
+})
+
 test("the warning states that suspicion is not proof", () => {
   // ⚠ This gate runs WITHOUT the app, so it cannot know whether the surface
   // actually changed — only that a file which draws one moved. Claiming more than

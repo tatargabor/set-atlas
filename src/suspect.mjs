@@ -69,6 +69,15 @@ export function changedFiles({ root, since, run = defaultRun }) {
 
 const defaultRun = (args) => execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
 
+/** Is the atlas's own INDEX.md modified but not committed? */
+export function provenanceIsUncommitted({ root, indexPath, run = defaultRun }) {
+  try {
+    return run(["-C", root, "status", "--porcelain", "--", indexPath]).trim().length > 0
+  } catch {
+    return false
+  }
+}
+
 /**
  * The report. `suspect` is what a gate acts on; `text` is what a human reads.
  *
@@ -76,10 +85,23 @@ const defaultRun = (args) => execFileSync("git", args, { encoding: "utf8", stdio
  * its evidence is missing reports a check that never ran, which is the failure this
  * whole package is about.
  */
-export function suspectReport({ atlasDir, commit, files, deleted = [], top = 8 }) {
+export function suspectReport({ atlasDir, commit, files, deleted = [], provenanceUncommitted = false, top = 8 }) {
   const lines = []
   const ui = uiFilesChanged(files ?? [])
   const gone = uiFilesChanged(deleted ?? [])
+
+  // ⚠ The stamp is read from the working tree, which is the right default — the
+  // question is "is the map behind the code in front of me". But when that stamp
+  // is uncommitted, the answer is about a state nobody else can see: CI, a
+  // reviewer, or the next clone would all read a different one. Measured on a
+  // consumer 2026-08-06: their commit said `ea855349`, their working tree said
+  // `0d5bbd9a`, and this gate reported green against the second without saying
+  // which. The measurement was right; the silence made it look like more.
+  if (provenanceUncommitted) {
+    lines.push("⚠ The atlas's provenance is UNCOMMITTED — this reports on your working tree.")
+    lines.push("  A reviewer, CI, or a fresh clone would read a different `generated_from_commit`.")
+    lines.push("")
+  }
 
   if (!commit) {
     lines.push("⚠ The atlas cannot be dated — its INDEX.md carries no `generated_from_commit`.")

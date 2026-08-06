@@ -16,7 +16,7 @@ import { createRequire } from "node:module"
 import { capture, writeScreens, withoutProvenance, slugFor } from "./capture.mjs"
 import { formatDiff } from "./diff.mjs"
 import { buildContext } from "./context.mjs"
-import { atlasCommit, changedFiles, suspectReport } from "./suspect.mjs"
+import { atlasCommit, changedFiles, suspectReport, provenanceIsUncommitted } from "./suspect.mjs"
 
 const args = process.argv.slice(2)
 const flag = (name) => {
@@ -46,6 +46,7 @@ if (args[0] === "suspect") {
     // `null` means git could not answer — a question the gate must not read as "clean".
     files: changed?.files ?? null,
     deleted: changed?.deleted ?? [],
+    provenanceUncommitted: provenanceIsUncommitted({ root: config.root, indexPath: path.join(config.outDir, "INDEX.md") }),
     top: Number(flag("--top")) || 8,
   })
   console.log(report.text)
