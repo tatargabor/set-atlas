@@ -82,14 +82,39 @@ export function generatorVersion() {
     // Installed in a way that hides its own manifest. Say `unknown`, not nothing:
     // a missing field reads as "an old atlas from before this existed".
   }
-  try {
-    const sha = execFileSync("git", ["-C", here, "rev-parse", "--short", "HEAD"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim()
-    if (sha) return `${version}+${sha}`
-  } catch {
-    // Not a checkout — the version alone is the honest answer.
-  }
-  return version
+  return version + shaIfOwnCheckout(path.join(here, ".."))
 }
+
+/**
+ * `+<sha>` when `packageRoot` really is this package's own git checkout, and an
+ * empty string otherwise.
+ *
+ * ⚠ Measured by a consumer 2026-08-06 on the INSTALLED path — invisible from the
+ * checkout we develop in. From `<consumer>/node_modules/set-atlas/src`, git walks
+ * UP to the first `.git` it finds, and that is the CONSUMER's. The field would
+ * then carry their SHA and move on every commit THEY make.
+ *
+ * Their argument for why this is a fix and not a footnote: the failure does not
+ * err conspicuously, it errs AUTHORITATIVELY. A line called `generator_version`
+ * holding someone else's commit is more believable than no line at all — the same
+ * shape as a provenance field that draws on the source it is meant to check.
+ *
+ * The repository is ours only when its top level IS the package root. Anywhere
+ * else the package version stands alone: coarser, and true.
+ */
+export function shaIfOwnCheckout(packageRoot, run = gitTopLevel) {
+  try {
+    const top = run(packageRoot)
+    if (!top || path.resolve(top.trim()) !== path.resolve(packageRoot)) return ""
+    const sha = execFileSync("git", ["-C", packageRoot, "rev-parse", "--short", "HEAD"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim()
+    return sha ? `+${sha}` : ""
+  } catch {
+    // Not a checkout at all — the version alone is the honest answer.
+    return ""
+  }
+}
+
+const gitTopLevel = (dir) => execFileSync("git", ["-C", dir, "rev-parse", "--show-toplevel"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
 
 /**
  * ⚠ `--check` compares file CONTENT, so the timestamp alone would mark the index

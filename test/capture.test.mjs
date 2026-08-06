@@ -3,7 +3,7 @@ import assert from "node:assert/strict"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { writeScreens, withoutProvenance } from "../src/capture.mjs"
+import { writeScreens, withoutProvenance, shaIfOwnCheckout } from "../src/capture.mjs"
 
 const tmpRoot = () => fs.mkdtempSync(path.join(os.tmpdir(), "set-atlas-test-"))
 
@@ -204,4 +204,26 @@ test("REGRESSION: a new generator version alone does not read as UI drift", () =
 
   // Narrow exception, not a blanket one: a real difference still counts.
   assert.notEqual(withoutProvenance(a), withoutProvenance(a.replace("screens: 3", "screens: 4")))
+})
+
+test("REGRESSION: the version does not borrow the CONSUMER's commit when installed", () => {
+  // Measured by a consumer 2026-08-06, on the installed path rather than the one
+  // we develop on — which is why it was invisible from here. `generatorVersion()`
+  // ran `git -C <our src/> rev-parse HEAD`, and from
+  // `<consumer>/node_modules/set-atlas/src` git walks UP to the first `.git` it
+  // finds. That is the consumer's:
+  //
+  //   git -C <consumer>/node_modules/.../src rev-parse --short HEAD  → c841b49f
+  //   the consumer's own HEAD                                        → c841b49f
+  //
+  // ⚠ The failure is not noise, it is a lie with a credible face: a field called
+  // `generator_version` carrying the consumer's SHA moves on every commit THEY
+  // make. Their words, and they are the reason this is a fix and not a note: it
+  // does not err conspicuously, it errs authoritatively — the presence of the
+  // field makes it more believable than it is.
+  //
+  // So the SHA is only used when the repository found IS this package's own.
+  // Elsewhere the package version stands alone: coarser, and true.
+  assert.equal(shaIfOwnCheckout("/pkg", () => "/pkg\n"), "")
+  assert.equal(shaIfOwnCheckout("/pkg", () => "/somewhere/else\n"), "", "the consumer's repo was accepted as ours")
 })
