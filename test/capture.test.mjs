@@ -3,6 +3,7 @@ import assert from "node:assert/strict"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
+import { execFileSync } from "node:child_process"
 import { writeScreens, withoutProvenance, shaIfOwnCheckout } from "../src/capture.mjs"
 
 const tmpRoot = () => fs.mkdtempSync(path.join(os.tmpdir(), "set-atlas-test-"))
@@ -226,4 +227,41 @@ test("REGRESSION: the version does not borrow the CONSUMER's commit when install
   // Elsewhere the package version stands alone: coarser, and true.
   assert.equal(shaIfOwnCheckout("/pkg", () => "/pkg\n"), "")
   assert.equal(shaIfOwnCheckout("/pkg", () => "/somewhere/else\n"), "", "the consumer's repo was accepted as ours")
+})
+
+test("REGRESSION: measured on the INSTALLED path, not only on the checkout", () => {
+  // The unit test above covers the decision; this covers the wiring around it —
+  // and the wiring is where the bug was. `generatorVersion()` computes the package
+  // root from its own file location, and nothing here exercised that until a
+  // consumer ran our code inside THEIR tree and found it reporting their commit.
+  //
+  // ⚠ Their conclusion is the one worth acting on, and it is not "you should have
+  // tested harder": the installed path only exists at a consumer, so a field like
+  // this needs a measurement on our side that BUILDS one. That is what this does —
+  // a real git repository with a real node_modules copy inside it.
+  const consumer = tmpRoot()
+  execFileSync("git", ["-C", consumer, "init", "-q"])
+  execFileSync("git", ["-C", consumer, "config", "user.email", "t@example.com"])
+  execFileSync("git", ["-C", consumer, "config", "user.name", "t"])
+  fs.writeFileSync(path.join(consumer, "app.txt"), "consumer\n")
+  execFileSync("git", ["-C", consumer, "add", "-A"])
+  execFileSync("git", ["-C", consumer, "commit", "-qm", "consumer commit"])
+  const consumerSha = execFileSync("git", ["-C", consumer, "rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim()
+
+  const installed = path.join(consumer, "node_modules", "set-atlas")
+  fs.mkdirSync(path.join(installed, "src"), { recursive: true })
+  const here = path.join(import.meta.dirname, "..")
+  fs.copyFileSync(path.join(here, "package.json"), path.join(installed, "package.json"))
+  for (const f of fs.readdirSync(path.join(here, "src"))) {
+    fs.copyFileSync(path.join(here, "src", f), path.join(installed, "src", f))
+  }
+
+  const version = execFileSync(
+    "node",
+    ["--input-type=module", "-e", `import {generatorVersion} from ${JSON.stringify(path.join(installed, "src", "capture.mjs"))}; console.log(generatorVersion())`],
+    { encoding: "utf8", cwd: consumer }
+  ).trim()
+
+  assert.doesNotMatch(version, new RegExp(consumerSha), `the installed package reported the CONSUMER's commit: ${version}`)
+  assert.match(version, /^\d+\.\d+\.\d+$/, `installed, the version should stand alone — got ${version}`)
 })
