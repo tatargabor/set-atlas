@@ -139,3 +139,35 @@ test("the warning states that suspicion is not proof", () => {
   const report = suspectReport({ atlasDir: dir, commit: "abc1234", files: ["src/app/orders/page.tsx"] })
   assert.match(report.text, /suspicion|cannot tell|not proof/i)
 })
+
+test("a generator change is named as such, not left looking like the UI moved", () => {
+  // The consumer's case, 2026-08-06: our `· N/M anchored` change moved all 33 of
+  // their pages. `--check` said "33 stale", `suspect` said "clean" — and both were
+  // right, because neither was asked about the tool. One of their sessions worked
+  // out that none of it was surface movement by reading OUR commit log by hand.
+  //
+  // ⚠ The next reader will not have that context, and the number teaches the wrong
+  // lesson either way: panic, or "a big number means format noise". The second is
+  // what would swallow a genuine 33-page surface change.
+  const dir = tmp({ "INDEX.md": "---\ngenerated_from_commit: abc1234\ngenerator_version: 0.1.0+aaaaaaa\n---\n" })
+  const report = suspectReport({ atlasDir: dir, commit: "abc1234", files: [], generatorVersion: "0.1.0+bbbbbbb" })
+
+  assert.match(report.text, /generator/i, "a tool-side format change was not named")
+  assert.match(report.text, /0\.1\.0\+aaaaaaa/, "the version the atlas was written with is not shown")
+})
+
+test("the same generator says nothing — silence is the normal case", () => {
+  const dir = tmp({ "INDEX.md": "---\ngenerated_from_commit: abc1234\ngenerator_version: 0.1.0+aaaaaaa\n---\n" })
+  const report = suspectReport({ atlasDir: dir, commit: "abc1234", files: [], generatorVersion: "0.1.0+aaaaaaa" })
+  assert.doesNotMatch(report.text, /generator/i)
+})
+
+test("an atlas from before the field existed is not called a generator change", () => {
+  // ⚠ Every atlas written before today lacks `generator_version`. Reporting those
+  // as "written by a different generator" would fire the gate once for every
+  // consumer on the same day, for a fact they cannot act on beyond regenerating —
+  // which they would do anyway. Absent is absent, not different.
+  const dir = tmp({ "INDEX.md": "---\ngenerated_from_commit: abc1234\n---\n" })
+  const report = suspectReport({ atlasDir: dir, commit: "abc1234", files: [], generatorVersion: "0.1.0+bbbbbbb" })
+  assert.doesNotMatch(report.text, /generator/i)
+})

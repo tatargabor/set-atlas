@@ -25,7 +25,45 @@ function provenance(root) {
   } catch {
     // Not a git checkout, or git is absent. Say nothing rather than guess.
   }
-  return { generated_at: new Date().toISOString(), generated_from_commit: commit }
+  return { generated_at: new Date().toISOString(), generated_from_commit: commit, generator_version: generatorVersion() }
+}
+
+/**
+ * Which version of THIS tool wrote the atlas.
+ *
+ * ⚠ Asked for by a consumer 2026-08-06, and the reason is a measured failure of
+ * ours: a change to `render-map.mjs` moved all 33 of their pages at once, and the
+ * cheap gate could not see why — `suspect` watches the consumer's UI files, and
+ * this was a change in the generator. `--check` saw it, but that needs a running
+ * app, so it is not gate-shaped. The cheapest measurement was blind to exactly the
+ * change class that moves the most pages at once.
+ *
+ * Their argument for why it is not cosmetic, kept because it decided the design:
+ * without this field "33 pages moved" either causes a panic, or — worse — teaches
+ * the reader that a large number means format noise. The second is what swallows a
+ * real 33-page surface change.
+ *
+ * The package version alone is too coarse (it does not move commit to commit), so
+ * the tool's own short SHA is appended when this is a git checkout — `0.1.0+3de116e`.
+ * From npm, where there is no checkout, the version stands alone and still
+ * distinguishes releases.
+ */
+export function generatorVersion() {
+  const here = path.dirname(new URL(import.meta.url).pathname)
+  let version = "unknown"
+  try {
+    version = JSON.parse(fs.readFileSync(path.join(here, "..", "package.json"), "utf8")).version ?? "unknown"
+  } catch {
+    // Installed in a way that hides its own manifest. Say `unknown`, not nothing:
+    // a missing field reads as "an old atlas from before this existed".
+  }
+  try {
+    const sha = execFileSync("git", ["-C", here, "rev-parse", "--short", "HEAD"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim()
+    if (sha) return `${version}+${sha}`
+  } catch {
+    // Not a checkout — the version alone is the honest answer.
+  }
+  return version
 }
 
 /**

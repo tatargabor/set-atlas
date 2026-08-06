@@ -13,7 +13,7 @@ import os from "node:os"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { createRequire } from "node:module"
-import { capture, writeScreens, withoutProvenance, slugFor } from "./capture.mjs"
+import { capture, writeScreens, withoutProvenance, slugFor, generatorVersion } from "./capture.mjs"
 import { formatDiff } from "./diff.mjs"
 import { buildContext } from "./context.mjs"
 import { atlasCommit, changedFiles, suspectReport, provenanceIsUncommitted } from "./suspect.mjs"
@@ -47,6 +47,7 @@ if (args[0] === "suspect") {
     files: changed?.files ?? null,
     deleted: changed?.deleted ?? [],
     provenanceUncommitted: provenanceIsUncommitted({ root: config.root, indexPath: path.join(config.outDir, "INDEX.md") }),
+    generatorVersion: generatorVersion(),
     top: Number(flag("--top")) || 8,
   })
   console.log(report.text)
@@ -92,6 +93,26 @@ if (args[0] === "context") {
   }
   console.log(buildContext({ atlasDir, changeDir, changeName: name, top }))
   process.exit(0)
+}
+
+// ⚠ Anything else that looks like a command is REFUSED here, and this line exists
+// because of a measured failure. Only `suspect` and `context` were handled above;
+// everything else fell through to the recording path below. So `set-atlas capture
+// /orders` did not fail — it silently recorded every screen (~5 minutes, needs the
+// app, a database and a login) and dropped the path. A consumer had documented
+// that spelling in three places, having reasonably assumed it existed: nothing
+// contradicted them, because the run looks exactly like success.
+//
+// The cheap repair is to fail loudly. If a partial `capture <path>` is ever built,
+// it belongs here — their argument for it is worth keeping: the gate's value rests
+// on the answer being cheap, and a warning whose only answer is a five-minute full
+// run is a warning that gets postponed, then skipped.
+if (args[0] && !args[0].startsWith("-")) {
+  console.error(`Unknown command: ${args[0]}`)
+  console.error("Commands: suspect · context")
+  console.error("Flags:    --check · --diff · --config <path>")
+  console.error("\nTo record the atlas, pass no command at all: set-atlas")
+  process.exit(1)
 }
 
 // Resolve Playwright from the CONSUMING project, not from set-atlas's own folder.

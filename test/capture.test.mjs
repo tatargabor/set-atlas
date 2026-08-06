@@ -145,3 +145,19 @@ test("REGRESSION: a redirect is stated on the page, not silently followed", () =
   const page = fs.readFileSync(path.join(root, "atlas", "quotes.md"), "utf8")
   assert.match(page, /^redirected_to: \/orders\?phase=quotes$/m)
 })
+
+test("the atlas states which GENERATOR made it, not only which commit it read", () => {
+  // Asked for by the consumer 2026-08-06, out of a measurement of ours: the
+  // `· N/M anchored` change moved all 33 of their pages, and `suspect` could not
+  // see why — it watches the CONSUMER's UI files, and this was a change in the
+  // tool. `--check` saw it, but that needs a running app, so it is not gate-shaped.
+  //
+  // ⚠ Their argument is what decided it, and it is not about convenience: without
+  // this field, "33 pages moved" either causes a panic or — far worse — teaches
+  // the reader that a large number means format noise. The second is what would
+  // swallow a real 33-page surface change.
+  const root = tmpRoot()
+  writeScreens([screen("/orders", "/orders")], { root, outDir: "atlas" })
+  const index = fs.readFileSync(path.join(root, "atlas", "INDEX.md"), "utf8")
+  assert.match(index, /^generator_version: \S+/m)
+})

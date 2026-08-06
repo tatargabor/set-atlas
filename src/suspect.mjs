@@ -24,9 +24,16 @@ import { readAtlas, selectPages } from "./context.mjs"
 
 /** The commit the atlas was generated from, or null when it cannot be dated. */
 export function atlasCommit(atlasDir) {
+  return indexField(atlasDir, "generated_from_commit")
+}
+
+/** The generator that wrote it, or null for an atlas from before the field existed. */
+export const atlasGeneratorVersion = (atlasDir) => indexField(atlasDir, "generator_version")
+
+function indexField(atlasDir, key) {
   const index = path.join(atlasDir, "INDEX.md")
   if (!fs.existsSync(index)) return null
-  const m = fs.readFileSync(index, "utf8").match(/^generated_from_commit:\s*(\S+)\s*$/m)
+  const m = fs.readFileSync(index, "utf8").match(new RegExp(`^${key}:\\s*(\\S+)\\s*$`, "m"))
   return m && m[1] !== "null" ? m[1] : null
 }
 
@@ -85,10 +92,27 @@ export function provenanceIsUncommitted({ root, indexPath, run = defaultRun }) {
  * its evidence is missing reports a check that never ran, which is the failure this
  * whole package is about.
  */
-export function suspectReport({ atlasDir, commit, files, deleted = [], provenanceUncommitted = false, top = 8 }) {
+export function suspectReport({ atlasDir, commit, files, deleted = [], provenanceUncommitted = false, generatorVersion = null, top = 8 }) {
   const lines = []
   const ui = uiFilesChanged(files ?? [])
   const gone = uiFilesChanged(deleted ?? [])
+
+  // A tool-side format change moves every page that carries the feature, and this
+  // gate is otherwise blind to it: it watches the CONSUMER's files. Measured on a
+  // consumer 2026-08-06 — one of our commits moved all 33 of their pages while
+  // `suspect` said "clean" and `--check` said "33 stale", both correctly.
+  //
+  // ⚠ Absent is NOT different. Every atlas written before this field existed lacks
+  // it; reporting those as a generator change would fire the gate once for every
+  // consumer on the same day, for something they cannot act on beyond a
+  // regeneration they would do anyway.
+  const wroteWith = atlasGeneratorVersion(atlasDir)
+  if (generatorVersion && wroteWith && wroteWith !== generatorVersion) {
+    lines.push(`⚠ The atlas was written by a DIFFERENT generator: \`${wroteWith}\` — this one is \`${generatorVersion}\`.`)
+    lines.push("  Pages may differ from a fresh run for a reason that has nothing to do with the UI.")
+    lines.push("  A format change moves every page carrying the feature; that is not surface movement.")
+    lines.push("")
+  }
 
   // ⚠ The stamp is read from the working tree, which is the right default — the
   // question is "is the map behind the code in front of me". But when that stamp
