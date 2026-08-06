@@ -171,3 +171,21 @@ test("an atlas from before the field existed is not called a generator change", 
   const report = suspectReport({ atlasDir: dir, commit: "abc1234", files: [], generatorVersion: "0.1.0+bbbbbbb" })
   assert.doesNotMatch(report.text, /generator/i)
 })
+
+test("a changed config is suspect too — a new route has no page to mark stale", () => {
+  // Named by a consumer 2026-08-06 as a blind spot in this gate, and they were
+  // right: adding a route to atlas.config.mjs adds a SCREEN, but the config is not
+  // a `.tsx` so `uiFilesChanged` drops it, and the new screen has no page yet — so
+  // there is nothing to report as stale either. The atlas is missing a screen
+  // entirely and the cheap gate says clean.
+  //
+  // ⚠ Missing-from-the-atlas is the worse half of staleness: a lagging page gets
+  // re-read, an absent screen reads as "this app has no such surface" — which is
+  // exactly the question the tool exists to answer.
+  const dir = tmp({ "INDEX.md": "---\ngenerated_from_commit: abc1234\n---\n" })
+  const report = suspectReport({ atlasDir: dir, commit: "abc1234", files: ["atlas.config.mjs"], configChanged: true })
+
+  assert.equal(report.suspect, true, "a config change left the gate reporting clean")
+  assert.match(report.text, /config/i)
+  assert.match(report.text, /route|screen/i, "the report does not say what a config change can mean")
+})

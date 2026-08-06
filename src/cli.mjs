@@ -48,6 +48,8 @@ if (args[0] === "suspect") {
     deleted: changed?.deleted ?? [],
     provenanceUncommitted: provenanceIsUncommitted({ root: config.root, indexPath: path.join(config.outDir, "INDEX.md") }),
     generatorVersion: generatorVersion(),
+    // The config names the routes; changing it can add a screen the atlas has never seen.
+    configChanged: (changed?.files ?? []).some((f) => f === path.relative(config.root, configPath)),
     top: Number(flag("--top")) || 8,
   })
   console.log(report.text)

@@ -92,7 +92,7 @@ export function provenanceIsUncommitted({ root, indexPath, run = defaultRun }) {
  * its evidence is missing reports a check that never ran, which is the failure this
  * whole package is about.
  */
-export function suspectReport({ atlasDir, commit, files, deleted = [], provenanceUncommitted = false, generatorVersion = null, top = 8 }) {
+export function suspectReport({ atlasDir, commit, files, deleted = [], provenanceUncommitted = false, generatorVersion = null, configChanged = false, top = 8 }) {
   const lines = []
   const ui = uiFilesChanged(files ?? [])
   const gone = uiFilesChanged(deleted ?? [])
@@ -140,7 +140,25 @@ export function suspectReport({ atlasDir, commit, files, deleted = [], provenanc
     return { suspect: true, text: lines.join("\n"), screens: [], files: [] }
   }
 
+  // ⚠ The config is not a drawing file, but changing it changes the SET of screens.
+  // Named by a consumer 2026-08-06 as a hole in this gate: a route added to the
+  // config adds a screen, the config is not `.tsx` so the extension rule drops it,
+  // and the new screen has no page yet — so there is nothing to mark stale either.
+  // The atlas is then missing a screen outright while the gate reports clean, and
+  // an absent screen reads as "this app has no such surface": the exact question
+  // the tool exists to answer.
+  if (configChanged) {
+    lines.push("⚠ The atlas CONFIG has changed since the atlas was recorded.")
+    lines.push("  A route added there is a screen with no page yet — nothing to mark stale, and")
+    lines.push("  nothing this gate can see. Only a regeneration settles what the route list is now.")
+    lines.push("")
+  }
+
   if (!ui.length) {
+    if (configChanged) {
+      lines.push(`  No file that DRAWS a screen has moved (\`${commit}\`); the config change above stands on its own.`)
+      return { suspect: true, text: lines.join("\n"), screens: [], files: [] }
+    }
     lines.push(`✓ No file that draws a screen has moved since the atlas was recorded (\`${commit}\`).`)
     lines.push(`  ${(files ?? []).length} file(s) changed in total; none of them render.`)
     return { suspect: false, text: lines.join("\n"), screens: [], files: [] }
