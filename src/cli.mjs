@@ -13,7 +13,7 @@ import os from "node:os"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { createRequire } from "node:module"
-import { capture, writeScreens, withoutProvenance, slugFor, generatorVersion, headCommit } from "./capture.mjs"
+import { capture, writeScreens, withoutProvenance, orphanPages, generatorVersion, headCommit } from "./capture.mjs"
 import { formatDiff } from "./diff.mjs"
 import { buildContext } from "./context.mjs"
 import { atlasCommit, changedFiles, suspectReport, provenanceIsUncommitted } from "./suspect.mjs"
@@ -186,6 +186,23 @@ const reportSize = () => {
 }
 if (!checkOnly) reportSize()
 
+// The recording path asks the orphan question too — see orphanPages for why it was
+// wrong that only `--check` did. This REPORTS; it never deletes, and it does not
+// change the exit code: a route that legitimately went away is not a failed run,
+// and a gate that fails on it would be skipped within the week.
+if (!checkOnly) {
+  const left = orphanPages({ dir: path.join(config.root, config.outDir), screens })
+  if (left.length) {
+    console.error(`\n⚠ ${left.length} page(s) on disk were NOT produced by this run:`)
+    for (const f of left) console.error(`    ${path.join(config.outDir, f)}`)
+    console.error(
+      "  Their route is gone from the app or from the config, so nothing refreshed them —\n" +
+        "  they now describe a screen that may not exist. Nothing was deleted: decide whether\n" +
+        "  the route should come back, or the page should go."
+    )
+  }
+}
+
 if (checkOnly) {
   // Staleness check: compare the freshly recorded pages against what's on disk.
   // Nothing is written — the caller (a git hook, CI) decides from the exit code.
@@ -207,11 +224,7 @@ if (checkOnly) {
   // already printed as `✗` and already marked stale on its own page. It produces
   // no file this run, so without this it would be reported as a deleted route
   // every single time (measured: `/leltar/[id]` fails on every run).
-  const known = new Set([...produced, ...failed.map((s) => `${slugFor(s)}.md`)])
-  const orphaned = fs
-    .readdirSync(dir)
-    .filter((f) => f.endsWith(".md") && !known.has(f))
-    .filter((f) => (read(path.join(dir, f)) ?? "").includes("route:") || ["INDEX.md", "ACTIONS.md", "NAVIGATION.md"].includes(f))
+  const orphaned = orphanPages({ dir, screens })
 
   if (showDiff) {
     for (const f of stale) {

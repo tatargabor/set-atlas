@@ -196,8 +196,15 @@ export function suspectReport({ atlasDir, commit, files, deleted = [], provenanc
     if (all.length > ranked.length) lines.push(`    ⚠ ${all.length - ranked.length} more matched and were not listed (--top).`)
     if (removed.length) {
       lines.push("")
-      lines.push(`  ${removed.length} of them lost a file that drew them. A regeneration will DROP those pages,`)
-      lines.push("  not update them — and until it runs, the atlas describes screens that may not exist.")
+      // ⚠ This used to promise that "a regeneration will DROP those pages". It does not:
+      // writeScreens only writes, and has never deleted anything. A reader who believed
+      // it ran the recording, saw a clean run, and kept a page describing a screen that
+      // was gone — the sentence sent them away from the one thing that needed doing.
+      // The recording now REPORTS such pages (orphanPages); removing one stays a human
+      // decision, because a deleted page and a screen that never existed look alike.
+      lines.push(`  ${removed.length} of them lost a file that drew them. A regeneration will NOT remove those`)
+      lines.push("  pages — it lists them as not produced by the run, and leaves the decision to you.")
+      lines.push("  Until that is settled, the atlas describes screens that may not exist.")
     }
   } else {
     // ⚠ Worth saying, not swallowing: a UI file that maps to no screen is either a

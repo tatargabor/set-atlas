@@ -4,7 +4,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { execFileSync } from "node:child_process"
-import { writeScreens, withoutProvenance, shaIfOwnCheckout } from "../src/capture.mjs"
+import { capture, writeScreens, withoutProvenance, shaIfOwnCheckout, orphanPages } from "../src/capture.mjs"
 
 const tmpRoot = () => fs.mkdtempSync(path.join(os.tmpdir(), "set-atlas-test-"))
 
@@ -264,4 +264,87 @@ test("REGRESSION: measured on the INSTALLED path, not only on the checkout", () 
 
   assert.doesNotMatch(version, new RegExp(consumerSha), `the installed package reported the CONSUMER's commit: ${version}`)
   assert.match(version, /^\d+\.\d+\.\d+$/, `installed, the version should stand alone — got ${version}`)
+})
+
+// ── The seam between capture() and writeScreens ──────────────────────────────
+
+/**
+ * A browser stub. Enough of the Playwright surface for `capture` to walk its loop
+ * without launching anything: the point of these tests is what capture PASSES ON,
+ * not what a real page contains.
+ */
+const fakeChromium = {
+  launch: async () => ({
+    newContext: async () => ({
+      newPage: async () => ({
+        goto: async () => {},
+        waitForTimeout: async () => {},
+        // `quietDom` is called WITH an argument, `extractNodes` without — that
+        // separates them without depending on which function object arrives.
+        evaluate: async (_fn, arg) => (arg ? { quiet: true, waitedMs: 0 } : { nodes: [], truncated: false }),
+        url: () => "http://app.test/orders",
+        ariaSnapshot: async () => '- button "Save"',
+      }),
+    }),
+    close: async () => {},
+  }),
+}
+
+test("REGRESSION: capture() passes recordedFrom through to the written page", async () => {
+  // Measured in a consumer repo 2026-08-09. The CLI took the stamp before the run
+  // and handed it to `capture`, but capture's option destructure did not accept it,
+  // so the write step threw `ReferenceError: recordedFrom is not defined`.
+  //
+  // ⚠ The shape of that failure is why this test exists rather than a careful read.
+  // It threw AFTER every screen had been visited: 33 green ticks over ten minutes,
+  // then nothing on disk. Expensive, and until you go looking for the files it is
+  // indistinguishable from a completed recording.
+  //
+  // ⚠ And the suite stayed 83/83 GREEN through it, because every test here calls
+  // `writeScreens` directly — several even pass `recordedFrom` to it explicitly.
+  // They measured the function that RECEIVES the value, never the caller that has
+  // to hand it over. A seam no test crosses is a seam that will break quietly.
+  const root = tmpRoot()
+  const screens = await capture(
+    { baseUrl: "http://app.test", root, outDir: "atlas", routes: [{ url: "/orders", pattern: "/orders", title: "Orders" }] },
+    { chromium: fakeChromium, recordedFrom: "cafef00d" }
+  )
+
+  assert.equal(screens.length, 1)
+  assert.equal(screens[0].error, undefined, `the screen failed to record: ${screens[0].error}`)
+  const index = fs.readFileSync(path.join(root, "atlas", "INDEX.md"), "utf8")
+  assert.match(index, /^generated_from_commit: cafef00d$/m, "capture() dropped the stamp on its way to writeScreens")
+})
+
+// ── Pages left behind when a route goes away ─────────────────────────────────
+
+test("REGRESSION: a page whose route is gone is reported, not silently kept", () => {
+  // Measured in a consumer repo 2026-08-06: three `/ajanlatok*` pages outlived the
+  // removal of their routes and had to be deleted BY HAND. Only `--check` — the mode
+  // that writes nothing — ever asked the question; the recording path never looked.
+  //
+  // ⚠ The page that stays is not missing information, it is FALSE information: the
+  // consumer's surface-fit gate reads this directory as the neighbourhood, so it
+  // asks about a screen that no longer exists and reports the check as done.
+  const root = tmpRoot()
+  writeScreens([screen("/orders", "/orders"), screen("/quotes", "/quotes")], { root, outDir: "atlas" })
+
+  // The next run no longer knows about /quotes — its route left the config.
+  const left = orphanPages({ dir: path.join(root, "atlas"), screens: [screen("/orders", "/orders")] })
+
+  assert.deepEqual(left, ["quotes.md"])
+  // Reporting only. Deleting would be the wrong repair: from outside, a deleted page
+  // and a screen that never existed look exactly the same.
+  assert.equal(fs.existsSync(path.join(root, "atlas", "quotes.md")), true, "orphanPages must not delete")
+})
+
+test("a screen that FAILED to record is not an orphan, and neither is the cross-section", () => {
+  // Without this the failing screen would be reported as a deleted route on every
+  // single run — and a warning that always fires is one nobody reads. Its page is
+  // kept on purpose and already marked stale.
+  const root = tmpRoot()
+  writeScreens([screen("/orders", "/orders"), screen("/leltar/1", "/leltar/[id]")], { root, outDir: "atlas" })
+
+  const now = [screen("/orders", "/orders"), screen("/leltar/1", "/leltar/[id]", { error: "ariaSnapshot did not settle" })]
+  assert.deepEqual(orphanPages({ dir: path.join(root, "atlas"), screens: now }), [])
 })

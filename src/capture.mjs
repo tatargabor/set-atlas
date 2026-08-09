@@ -153,6 +153,43 @@ const slugForPattern = (pattern) =>
 export const slugFor = (screen) =>
   screen.state ? `${slugForPattern(screen.pattern)}--${screen.state}` : slugForPattern(screen.pattern)
 
+/** Written by writeScreens on every run, so never an orphan. */
+const CROSS_SECTION = ["INDEX.md", "ACTIONS.md", "NAVIGATION.md"]
+
+/**
+ * Pages on disk that THIS run did not produce — a route deleted from the app, or
+ * dropped from the atlas config.
+ *
+ * ⚠ Nothing here deletes. Removing the page would be the wrong repair for the same
+ * reason markStale states: from outside, a deleted page and a screen that never
+ * existed look identical. The judgement — gone for good, or a route to restore —
+ * belongs to a person; this only makes sure a person is ASKED.
+ *
+ * ⚠ WHY BOTH PATHS CALL THIS. It was reachable only under `--check`, the mode that
+ * writes nothing. The recording path — the one you actually run to refresh the atlas
+ * — never looked, so a page whose route left the config stayed on disk, byte for
+ * byte, with no stale marker and no mention. Measured in a consumer repo 2026-08-06:
+ * three `/ajanlatok*` pages survived the route's removal and had to be deleted BY
+ * HAND, noticed only because someone read the config diff. That inverts the tool's
+ * own rule — the mode that could act did not look, the mode that looked could not
+ * act — and it is exactly the "a stale map is worse than none" failure the atlas
+ * exists to prevent, since a page describing a screen that is gone is not missing
+ * information, it is false information.
+ *
+ * A screen that FAILED to record is NOT an orphan: it keeps its page on purpose,
+ * already marked stale, and it is passed in with the rest of `screens`.
+ */
+export function orphanPages({ dir, screens }) {
+  if (!fs.existsSync(dir)) return []
+  const known = new Set([...screens.map((s) => `${slugFor(s)}.md`), ...CROSS_SECTION])
+  return fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith(".md") && !known.has(f))
+    // Only a recorded screen page can be orphaned. A hand-written note that happens
+    // to live in the atlas directory is not this tool's to comment on.
+    .filter((f) => fs.readFileSync(path.join(dir, f), "utf-8").includes("route:"))
+}
+
 /**
  * A screen that could not be recorded keeps the page from its last good run —
  * and stops claiming to be current.
@@ -245,8 +282,19 @@ function frontmatter(fields) {
  * @param {object} config  see atlas.config.example.mjs
  * @param {object} opts    { chromium } — the caller supplies the Playwright instance
  *                         so set-atlas never pins a browser version on you.
+ *                         { recordedFrom } — the commit the recording STARTED from, stamped
+ *                         onto every page. Taken by the caller before the run, never here:
+ *                         a full recording takes minutes, so a commit landing mid-run would
+ *                         otherwise become the stamp and the atlas would claim to describe a
+ *                         state it never saw.
+ *
+ * ⚠ `recordedFrom` MUST stay in this destructure. It was passed by the CLI but not accepted
+ * here, so the write step threw `ReferenceError: recordedFrom is not defined` — AFTER every
+ * screen had been visited. The run looked like a success for its whole length (33 green
+ * ticks) and wrote nothing, which is the worst shape a failure can take: expensive, and
+ * indistinguishable from a completed recording until you look for the files.
  */
-export async function capture(config, { chromium, onProgress = () => {} }) {
+export async function capture(config, { chromium, recordedFrom = null, onProgress = () => {} }) {
   const {
     baseUrl,
     routes,
